@@ -3,68 +3,50 @@ import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
-import { createClient } from '../../lib/api'
+import { updateClient } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
-import type { ClientType, RiskLevel } from '../../lib/types'
+import type { Client, ClientType, RiskLevel } from '../../lib/types'
 import { RISK_LABELS, VULNERABLE_ACTIVITIES } from '../../lib/types'
 
-interface NewClientModalProps {
-  open: boolean
+interface EditClientModalProps {
+  client: Client | null
   onClose: () => void
-  onCreated: () => void
+  onUpdated: () => void
 }
 
-export function NewClientModal({ open, onClose, onCreated }: NewClientModalProps) {
+export function EditClientModal({ client, onClose, onUpdated }: EditClientModalProps) {
   const { user } = useAuth()
-  const [name, setName] = useState('')
-  const [clientType, setClientType] = useState<ClientType>('persona_moral')
-  const [rfc, setRfc] = useState('')
-  const [curp, setCurp] = useState('')
-  const [email, setEmail] = useState('')
-  const [phone, setPhone] = useState('')
-  const [address, setAddress] = useState('')
-  const [industry, setIndustry] = useState('')
-  const [nationality, setNationality] = useState('México')
-  const [legalRep, setLegalRep] = useState('')
-  const [vulnerableActivity, setVulnerableActivity] = useState(false)
-  const [riskLevel, setRiskLevel] = useState<RiskLevel>('medio')
-  const [notes, setNotes] = useState('')
+  const [name, setName] = useState(client?.name ?? '')
+  const [clientType, setClientType] = useState<ClientType>(client?.client_type ?? 'persona_moral')
+  const [rfc, setRfc] = useState(client?.rfc ?? '')
+  const [curp, setCurp] = useState(client?.curp ?? '')
+  const [email, setEmail] = useState(client?.email ?? '')
+  const [phone, setPhone] = useState(client?.phone ?? '')
+  const [address, setAddress] = useState(client?.address ?? '')
+  const [industry, setIndustry] = useState(client?.industry ?? '')
+  const [activityCode, setActivityCode] = useState(client?.activity_code ?? '')
+  const [nationality, setNationality] = useState(client?.nationality ?? 'México')
+  const [legalRep, setLegalRep] = useState(client?.legal_representative ?? '')
+  const [vulnerableActivity, setVulnerableActivity] = useState(client?.vulnerable_activity ?? false)
+  const [riskLevel, setRiskLevel] = useState<RiskLevel>(client?.risk_level ?? 'medio')
+  const [notes, setNotes] = useState(client?.notes ?? '')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  function reset() {
-    setName('')
-    setClientType('persona_moral')
-    setRfc('')
-    setCurp('')
-    setEmail('')
-    setPhone('')
-    setAddress('')
-    setIndustry('')
-    setNationality('México')
-    setLegalRep('')
-    setVulnerableActivity(false)
-    setRiskLevel('medio')
-    setNotes('')
-    setError('')
-  }
-
-  function handleClose() {
-    reset()
-    onClose()
-  }
+  if (!client) return null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) {
-      setError('El nombre del cliente es obligatorio.')
+      setError('El nombre es obligatorio.')
       return
     }
 
     setSubmitting(true)
     setError('')
 
-    const result = await createClient(
+    const result = await updateClient(
+      client!.id,
       {
         name,
         client_type: clientType,
@@ -74,6 +56,7 @@ export function NewClientModal({ open, onClose, onCreated }: NewClientModalProps
         phone,
         address,
         industry,
+        activity_code: activityCode,
         nationality,
         legal_representative: legalRep,
         vulnerable_activity: vulnerableActivity,
@@ -84,27 +67,20 @@ export function NewClientModal({ open, onClose, onCreated }: NewClientModalProps
     )
 
     setSubmitting(false)
-
     if (result.error) {
       setError(result.error)
       return
     }
 
-    reset()
-    onCreated()
+    onUpdated()
     onClose()
   }
 
   return (
-    <Modal open={open} onClose={handleClose} title="Nuevo cliente">
+    <Modal open={!!client} onClose={onClose} title="Editar cliente">
       <form onSubmit={handleSubmit}>
-        <Input
-          label="Nombre o razón social *"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-        />
-        <Select label="Tipo de cliente" value={clientType} onChange={(e) => setClientType(e.target.value as ClientType)}>
+        <Input label="Nombre o razón social *" value={name} onChange={(e) => setName(e.target.value)} required />
+        <Select label="Tipo" value={clientType} onChange={(e) => setClientType(e.target.value as ClientType)}>
           <option value="persona_moral">Persona moral</option>
           <option value="persona_fisica">Persona física</option>
         </Select>
@@ -125,6 +101,7 @@ export function NewClientModal({ open, onClose, onCreated }: NewClientModalProps
             <option key={a} value={a}>{a}</option>
           ))}
         </Select>
+        <Input label="Código de actividad" value={activityCode} onChange={(e) => setActivityCode(e.target.value)} placeholder="Ej. 522110" />
         <div className="form-row">
           <Input label="Nacionalidad" value={nationality} onChange={(e) => setNationality(e.target.value)} />
           {clientType === 'persona_moral' && (
@@ -143,9 +120,9 @@ export function NewClientModal({ open, onClose, onCreated }: NewClientModalProps
         <Input label="Notas" value={notes} onChange={(e) => setNotes(e.target.value)} />
         {error && <p className="form-error">{error}</p>}
         <div className="modal-actions">
-          <Button type="button" variant="secondary" onClick={handleClose}>Cancelar</Button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button type="submit" disabled={submitting}>
-            {submitting ? 'Guardando...' : 'Guardar cliente'}
+            {submitting ? 'Guardando...' : 'Guardar cambios'}
           </Button>
         </div>
       </form>

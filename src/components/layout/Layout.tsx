@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Briefcase,
   FileCheck,
+  FileSpreadsheet,
   FolderOpen,
   LayoutDashboard,
   LogOut,
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/expedientes', icon: FolderOpen, label: 'Expedientes' },
   { to: '/kyc', icon: FileCheck, label: 'KYC' },
   { to: '/alertas', icon: AlertTriangle, label: 'Alertas' },
+  { to: '/reportes', icon: FileSpreadsheet, label: 'Reportes' },
   { to: '/buscar', icon: Search, label: 'Buscar' },
 ]
 

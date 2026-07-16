@@ -13,21 +13,14 @@ interface DocumentsPanelProps {
   kycId?: string
 }
 
-const DOC_TYPES = [
-  'Identificación',
-  'Comprobante domicilio',
-  'Acta constitutiva',
-  'Contrato',
-  'Dictamen',
-  'Reporte PLD',
-  'Otro',
-]
+import { DOC_TYPE_OPTIONS, DOCUMENT_TEMPLATES } from '../../lib/document-templates'
 
 export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanelProps) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const canDelete = profile?.role !== 'asistente'
   const { documents, loading, refetch } = useDocuments({ expedienteId, clientId, kycId })
   const fileRef = useRef<HTMLInputElement>(null)
-  const [docType, setDocType] = useState(DOC_TYPES[0])
+  const [docType, setDocType] = useState<string>(DOC_TYPE_OPTIONS[0])
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
@@ -63,10 +56,13 @@ export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanel
     <div className="documents-panel">
       <div className="doc-upload-row">
         <Select label="Tipo de documento" value={docType} onChange={(e) => setDocType(e.target.value)}>
-          {DOC_TYPES.map((t) => (
+          {DOC_TYPE_OPTIONS.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </Select>
+        <span className="doc-template-hint">
+          {DOCUMENT_TEMPLATES.find((t) => t.type === docType)?.description}
+        </span>
         <input
           ref={fileRef}
           type="file"
@@ -106,9 +102,11 @@ export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanel
               <button type="button" className="icon-btn" onClick={() => handleDownload(doc.storage_path)} title="Descargar">
                 <Download size={16} />
               </button>
-              <button type="button" className="icon-btn danger" onClick={() => handleDelete(doc.id, doc.storage_path)} title="Eliminar">
-                <Trash2 size={16} />
-              </button>
+              {canDelete && (
+                <button type="button" className="icon-btn danger" onClick={() => handleDelete(doc.id, doc.storage_path)} title="Eliminar">
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           ))}
         </div>

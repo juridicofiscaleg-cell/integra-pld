@@ -103,9 +103,14 @@ export function KycPage() {
 
                 <div className="kyc-flags">
                   {kyc.pep && <Badge variant="danger">PEP</Badge>}
-                  {kyc.sanctions_check && <Badge variant="success">Listas verificadas</Badge>}
+                  {kyc.sanctions_check && <Badge variant="success">Listas OK</Badge>}
+                  {kyc.sanctions_results && Object.values(kyc.sanctions_results).some((r) => r.match) && (
+                    <Badge variant="danger">Coincidencia en listas</Badge>
+                  )}
                   {kyc.expires_at && (
-                    <span className="kyc-expiry">Vence: {formatDate(kyc.expires_at)}</span>
+                    <span className={`kyc-expiry ${kyc.status === 'vencido' ? 'overdue-text' : ''}`}>
+                      Vence: {formatDate(kyc.expires_at)}
+                    </span>
                   )}
                 </div>
               </div>

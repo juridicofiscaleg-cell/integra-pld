@@ -29,10 +29,15 @@ export interface Client {
   name: string
   client_type: ClientType
   rfc?: string
+  curp?: string
   email?: string
   phone?: string
   address?: string
   industry?: string
+  activity_code?: string
+  nationality?: string
+  legal_representative?: string
+  vulnerable_activity?: boolean
   notes?: string
   risk_level: RiskLevel
   created_by?: string
@@ -92,7 +97,20 @@ export interface KycChecklist {
   constancia_fiscal?: boolean
   declaracion_origen_recursos?: boolean
   lista_negra_verificada?: boolean
+  ofac_verificado?: boolean
+  sat_69b_verificado?: boolean
+  un_list_verificado?: boolean
 }
+
+export interface SanctionsResult {
+  list: 'ofac' | 'sat_69b' | 'un'
+  label: string
+  checked_at: string
+  match: boolean
+  details?: string
+}
+
+export type SanctionsResults = Record<string, SanctionsResult>
 
 export interface KycRecord {
   id: string
@@ -103,6 +121,7 @@ export interface KycRecord {
   checklist: KycChecklist
   pep: boolean
   sanctions_check: boolean
+  sanctions_results?: SanctionsResults
   beneficial_owner?: string
   review_notes?: string
   reviewed_by?: string
@@ -194,4 +213,28 @@ export const KYC_CHECKLIST_ITEMS: { key: keyof KycChecklist; label: string }[] =
   { key: 'constancia_fiscal', label: 'Constancia de situación fiscal' },
   { key: 'declaracion_origen_recursos', label: 'Declaración origen de recursos' },
   { key: 'lista_negra_verificada', label: 'Verificación listas negras' },
+  { key: 'ofac_verificado', label: 'OFAC verificado' },
+  { key: 'sat_69b_verificado', label: 'SAT 69-B verificado' },
+  { key: 'un_list_verificado', label: 'Lista ONU verificada' },
 ]
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Administrador',
+  abogado: 'Abogado',
+  asistente: 'Asistente',
+}
+
+export const VULNERABLE_ACTIVITIES = [
+  'Juegos y sorteos',
+  'Tarjetas de crédito',
+  'Préstamos',
+  'Inversiones',
+  'Bienes raíces',
+  'Metales y joyas',
+  'Arte y antigüedades',
+  'Vehículos',
+  'Blindaje',
+  'Donativos',
+  'Servicios profesionales',
+  'Otra actividad vulnerable',
+] as const

@@ -11,6 +11,7 @@ import { KycPage } from './pages/KycPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { ReportsPage } from './pages/ReportsPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { profile, loading } = useAuth()
@@ -32,6 +33,7 @@ function AppRoutes() {
       <Route path="/expedientes/:id" element={<ProtectedRoute><ExpedienteDetailPage /></ProtectedRoute>} />
       <Route path="/kyc" element={<ProtectedRoute><KycPage /></ProtectedRoute>} />
       <Route path="/alertas" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
+      <Route path="/reportes" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
       <Route path="/buscar" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
       <Route path="/configuracion" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={isDemo ? '/login' : '/'} replace />} />

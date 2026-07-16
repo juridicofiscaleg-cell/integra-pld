@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { syncKycAlerts } from '../lib/api'
 import {
   DEMO_ACTIVITY,
   DEMO_ALERTS,
@@ -16,6 +17,7 @@ import type {
   Expediente,
   ExpedienteStage,
   KycRecord,
+  Profile,
 } from '../lib/types'
 
 export function useClients() {
@@ -158,24 +160,28 @@ export function useAlerts() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  async function fetchAlerts() {
     if (!isSupabaseConfigured) {
       setAlerts(DEMO_ALERTS)
       setLoading(false)
       return
     }
-    supabase!
+    setLoading(true)
+    await syncKycAlerts()
+    const { data } = await supabase!
       .from('alerts')
       .select('*, clients(*), expedientes(*)')
       .eq('resolved', false)
       .order('due_date')
-      .then(({ data }) => {
-        setAlerts(data ?? [])
-        setLoading(false)
-      })
+    setAlerts(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchAlerts()
   }, [])
 
-  return { alerts, loading }
+  return { alerts, loading, refetch: fetchAlerts }
 }
 
 export function useActivity() {
@@ -229,18 +235,45 @@ export function useSearch(query: string) {
     }
 
     Promise.all([
-      supabase!.from('clients').select('*').ilike('name', `%${query}%`),
+      supabase!.from('clients').select('*').or(`name.ilike.%${query}%,rfc.ilike.%${query}%,email.ilike.%${query}%`),
       supabase!.from('expedientes').select('*, clients(*)').ilike('title', `%${query}%`),
       supabase!.from('kyc_records').select('*, clients(*)'),
     ]).then(([c, e, k]) => {
       setResults({
         clients: c.data ?? [],
         expedientes: e.data ?? [],
-        kyc: (k.data ?? []).filter((r) => r.clients?.name?.toLowerCase().includes(q)),
+        kyc: (k.data ?? []).filter(
+          (r) =>
+            r.clients?.name?.toLowerCase().includes(q) ||
+            r.beneficial_owner?.toLowerCase().includes(q),
+        ),
       })
       setLoading(false)
     })
   }, [query])
 
   return { results, loading }
+}
+
+export function useProfiles() {
+  const [profiles, setProfiles] = useState<Profile[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setProfiles([])
+      setLoading(false)
+      return
+    }
+    supabase!
+      .from('profiles')
+      .select('*')
+      .order('full_name')
+      .then(({ data }) => {
+        setProfiles(data ?? [])
+        setLoading(false)
+      })
+  }, [])
+
+  return { profiles, loading }
 }

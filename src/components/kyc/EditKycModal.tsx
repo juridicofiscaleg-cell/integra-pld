@@ -1,3 +1,4 @@
+import { addYears, format } from 'date-fns'
 import { useEffect, useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Select } from '../ui/Select'
@@ -22,6 +23,7 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
   const [sanctionsCheck, setSanctionsCheck] = useState(kyc?.sanctions_check ?? false)
   const [beneficialOwner, setBeneficialOwner] = useState(kyc?.beneficial_owner ?? '')
   const [reviewNotes, setReviewNotes] = useState(kyc?.review_notes ?? '')
+  const [expiresAt, setExpiresAt] = useState(kyc?.expires_at?.slice(0, 10) ?? '')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -33,6 +35,7 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
       setSanctionsCheck(kyc.sanctions_check)
       setBeneficialOwner(kyc.beneficial_owner ?? '')
       setReviewNotes(kyc.review_notes ?? '')
+      setExpiresAt(kyc.expires_at?.slice(0, 10) ?? format(addYears(new Date(), 1), 'yyyy-MM-dd'))
       setError('')
     }
   }, [kyc])
@@ -51,7 +54,15 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
 
     const result = await updateKyc(
       kyc.id,
-      { checklist, status, pep, sanctions_check: sanctionsCheck, beneficial_owner: beneficialOwner, review_notes: reviewNotes },
+      {
+        checklist,
+        status,
+        pep,
+        sanctions_check: sanctionsCheck,
+        beneficial_owner: beneficialOwner,
+        review_notes: reviewNotes,
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+      },
       user?.id,
     )
 
@@ -100,6 +111,7 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
         </div>
 
         <Input label="Beneficiario controlador" value={beneficialOwner} onChange={(e) => setBeneficialOwner(e.target.value)} />
+        <Input label="Vencimiento KYC" type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
         <Input label="Notas" value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />
 
         {error && <p className="form-error">{error}</p>}

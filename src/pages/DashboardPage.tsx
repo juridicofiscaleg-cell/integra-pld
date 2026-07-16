@@ -15,6 +15,12 @@ export function DashboardPage() {
 
   const activeExpedientes = expedientes.filter((e) => e.status === 'activo')
   const pendingKyc = kycRecords.filter((k) => k.status === 'pendiente' || k.status === 'en_revision')
+  const expiringKyc = kycRecords.filter((k) => {
+    if (!k.expires_at || k.status === 'vencido') return k.status === 'vencido'
+    const days = Math.ceil((new Date(k.expires_at).getTime() - Date.now()) / 86400000)
+    return days <= 30
+  })
+  const vulnerableClients = clients.filter((c) => c.vulnerable_activity)
 
   const stats = [
     { label: 'Clientes', value: clients.length, icon: Users, to: '/clientes' },
@@ -121,6 +127,29 @@ export function DashboardPage() {
               )
             })}
           </div>
+          {vulnerableClients.length > 0 && (
+            <p className="dashboard-note">
+              {vulnerableClients.length} cliente(s) con actividad vulnerable
+            </p>
+          )}
+        </section>
+
+        <section className="card">
+          <h2>KYC — atención requerida</h2>
+          {expiringKyc.length === 0 ? (
+            <p className="empty-state">Sin KYC vencidos o por vencer</p>
+          ) : (
+            <div className="mini-list">
+              {expiringKyc.slice(0, 5).map((kyc) => (
+                <Link key={kyc.id} to={`/clientes/${kyc.client_id}`} className="mini-list-item">
+                  <strong>{kyc.clients?.name}</strong>
+                  <Badge variant={kyc.status === 'vencido' ? 'danger' : 'warning'}>
+                    {kyc.status === 'vencido' ? 'Vencido' : `Vence ${formatDate(kyc.expires_at)}`}
+                  </Badge>
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

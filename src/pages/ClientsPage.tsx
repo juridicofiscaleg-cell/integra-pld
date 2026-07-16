@@ -49,7 +49,8 @@ export function ClientsPage() {
                 <th>Cliente</th>
                 <th>Tipo</th>
                 <th>RFC</th>
-                <th>Industria</th>
+                <th>Giro</th>
+                <th>Act. vuln.</th>
                 <th>Riesgo</th>
                 <th>Registro</th>
               </tr>
@@ -66,6 +67,7 @@ export function ClientsPage() {
                   <td>{client.client_type === 'persona_fisica' ? 'Persona física' : 'Persona moral'}</td>
                   <td>{client.rfc ?? '—'}</td>
                   <td>{client.industry ?? '—'}</td>
+                  <td>{client.vulnerable_activity ? 'Sí' : '—'}</td>
                   <td>
                     <Badge variant={riskVariant[client.risk_level]}>
                       {RISK_LABELS[client.risk_level]}

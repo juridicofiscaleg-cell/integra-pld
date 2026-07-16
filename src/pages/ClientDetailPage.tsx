@@ -1,19 +1,26 @@
+import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, FileCheck, FolderOpen } from 'lucide-react'
+import { ArrowLeft, FileCheck, FolderOpen, Pencil } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
+import { EditClientModal } from '../components/clients/EditClientModal'
+import { DocumentsPanel } from '../components/documents/DocumentsPanel'
+import { SanctionsPanel } from '../components/kyc/SanctionsPanel'
 import { useClients, useExpedientes, useKycRecords } from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { formatDate } from '../lib/utils'
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { clients } = useClients()
+  const { clients, refetch } = useClients()
   const { expedientes } = useExpedientes()
-  const { records: kycRecords } = useKycRecords()
+  const { records: kycRecords, refetch: refetchKyc } = useKycRecords()
+  const [editing, setEditing] = useState(false)
 
   const client = clients.find((c) => c.id === id)
   const clientExpedientes = expedientes.filter((e) => e.client_id === id)
   const clientKyc = kycRecords.filter((k) => k.client_id === id)
+  const latestKyc = clientKyc[0]
 
   if (!client) {
     return (
@@ -35,21 +42,31 @@ export function ClientDetailPage() {
           <p>
             {client.client_type === 'persona_fisica' ? 'Persona física' : 'Persona moral'}
             {client.rfc && ` · RFC: ${client.rfc}`}
+            {client.curp && ` · CURP: ${client.curp}`}
           </p>
         </div>
-        <Badge variant={client.risk_level === 'bajo' ? 'success' : client.risk_level === 'medio' ? 'warning' : 'danger'}>
-          Riesgo {RISK_LABELS[client.risk_level]}
-        </Badge>
+        <div className="header-actions">
+          <Badge variant={client.risk_level === 'bajo' ? 'success' : client.risk_level === 'medio' ? 'warning' : 'danger'}>
+            Riesgo {RISK_LABELS[client.risk_level]}
+          </Badge>
+          {client.vulnerable_activity && <Badge variant="danger">Act. vulnerable</Badge>}
+          <Button variant="secondary" onClick={() => setEditing(true)}>
+            <Pencil size={16} /> Editar
+          </Button>
+        </div>
       </header>
 
       <div className="detail-grid">
         <section className="card">
-          <h2>Información de contacto</h2>
+          <h2>Datos PLD / contacto</h2>
           <dl className="detail-list">
             <dt>Email</dt><dd>{client.email ?? '—'}</dd>
             <dt>Teléfono</dt><dd>{client.phone ?? '—'}</dd>
-            <dt>Industria</dt><dd>{client.industry ?? '—'}</dd>
+            <dt>Giro</dt><dd>{client.industry ?? '—'}</dd>
+            <dt>Nacionalidad</dt><dd>{client.nationality ?? '—'}</dd>
+            <dt>Representante legal</dt><dd>{client.legal_representative ?? '—'}</dd>
             <dt>Dirección</dt><dd>{client.address ?? '—'}</dd>
+            <dt>Actividad vulnerable</dt><dd>{client.vulnerable_activity ? 'Sí' : 'No'}</dd>
             <dt>Registrado</dt><dd>{formatDate(client.created_at)}</dd>
           </dl>
           {client.notes && (
@@ -93,7 +110,24 @@ export function ClientDetailPage() {
             </div>
           )}
         </section>
+
+        {latestKyc && (
+          <section className="card">
+            <SanctionsPanel kyc={latestKyc} client={client} onUpdated={refetchKyc} />
+          </section>
+        )}
+
+        <section className="card full-width">
+          <h2>Documentos del cliente</h2>
+          <DocumentsPanel clientId={client.id} />
+        </section>
       </div>
+
+      <EditClientModal
+        client={editing ? client : null}
+        onClose={() => setEditing(false)}
+        onUpdated={refetch}
+      />
     </div>
   )
 }
