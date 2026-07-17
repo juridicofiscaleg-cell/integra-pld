@@ -1657,7 +1657,7 @@ export async function fetchApprovalRequests(): Promise<{
     .from('approval_requests')
     .select('*')
     .order('created_at', { ascending: false })
-  if (error) return { requests: [], error: formatSupabaseMigrationError(error.message) }
+  if (error) return { requests: [], error: formatSupabaseMigrationError(error.message, 'migration-approvals.sql') }
   return { requests: (data ?? []) as import('./types').ApprovalRequest[] }
 }
 
@@ -1703,7 +1703,7 @@ export async function createApprovalRequest(
     .select('id')
     .single()
 
-  if (error) return { error: formatSupabaseMigrationError(error.message) }
+  if (error) return { error: formatSupabaseMigrationError(error.message, 'migration-approvals.sql') }
 
   await supabase.from('activity_log').insert({
     client_id: data.client_id,
