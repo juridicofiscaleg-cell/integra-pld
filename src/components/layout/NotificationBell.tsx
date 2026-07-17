@@ -4,18 +4,24 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useNotifications } from '../../hooks/useNotifications'
 import { formatRelative } from '../../lib/utils'
+import { cn } from '../../lib/utils'
 
-export function NotificationBell() {
+type Props = {
+  placement?: 'footer' | 'top'
+}
+
+export function NotificationBell({ placement = 'top' }: Props) {
   const { user } = useAuth()
-  const { unread, items, markRead, markAllRead } = useNotifications(user?.id)
+  const { unread, items, markRead, markAllRead, dbError } = useNotifications(user?.id)
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="notification-bell">
+    <div className={cn('notification-bell', placement === 'footer' && 'notification-bell--footer')}>
       <button
         type="button"
         className="icon-btn"
         aria-label="Notificaciones"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
       >
         <Bell size={18} />
@@ -33,8 +39,9 @@ export function NotificationBell() {
                 </button>
               )}
             </div>
+            {dbError && <p className="form-error notification-db-hint">{dbError}</p>}
             {items.length === 0 ? (
-              <p className="cell-sub">Sin notificaciones</p>
+              <p className="cell-sub">{dbError ? 'Sin respaldo local aún.' : 'Sin notificaciones'}</p>
             ) : (
               <ul className="notification-list">
                 {items.slice(0, 12).map((n) => (

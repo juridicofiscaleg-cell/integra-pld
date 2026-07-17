@@ -3,7 +3,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
 import { DEMO_PROFILE } from '../lib/demo-data'
-import { ensureAccountApprovalRequest } from '../lib/api'
+import { ensureAccountApprovalRequest, validateClientInvite } from '../lib/api'
 import { getAuthErrorMessage } from '../lib/auth-errors'
 
 interface AuthContextValue {
@@ -13,7 +13,12 @@ interface AuthContextValue {
   loading: boolean
   isDemo: boolean
   signIn: (email: string, password: string) => Promise<{ error?: string; success?: string }>
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error?: string; success?: string }>
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    inviteCode?: string,
+  ) => Promise<{ error?: string; success?: string }>
   resendConfirmation: (email: string) => Promise<{ error?: string; success?: string }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -77,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data) {
       setProfile(data)
-      if (data.account_status === 'pendiente') {
+      if (data.account_status === 'pendiente' && data.role !== 'cliente') {
         void ensureAccountApprovalRequest(data)
       }
       setLoading(false)
@@ -85,14 +90,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (error?.code === 'PGRST116' && authUser) {
+      const inviteCode = String(authUser.user_metadata?.invite_code ?? '').trim()
+      const isClientSignup = inviteCode.length > 0
+
       const { data: created, error: insertError } = await supabase
         .from('profiles')
         .insert({
           id: userId,
           full_name: authUser.user_metadata?.full_name ?? authUser.email?.split('@')[0] ?? 'Usuario',
           email: authUser.email ?? '',
-          role: 'asistente',
-          account_status: 'pendiente',
+          role: isClientSignup ? 'cliente' : 'asistente',
+          account_status: isClientSignup ? 'activo' : 'pendiente',
         })
         .select()
         .single()
@@ -140,22 +148,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function signUp(email: string, password: string, fullName: string) {
+  async function signUp(email: string, password: string, fullName: string, inviteCode?: string) {
     if (!supabase) return { error: 'Supabase no configurado' }
+
+    const code = inviteCode?.trim().toUpperCase()
+    let check: Awaited<ReturnType<typeof validateClientInvite>> | undefined
+    if (code) {
+      check = await validateClientInvite(code)
+      if (!check.valid) return { error: check.error ?? 'Código de acceso no válido' }
+      if (check.intendedEmail && email.trim().toLowerCase() !== check.intendedEmail.toLowerCase()) {
+        return { error: `Use el correo autorizado: ${check.intendedEmail}` }
+      }
+    }
 
     try {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
-          data: { full_name: fullName.trim() },
+          data: {
+            full_name: fullName.trim(),
+            ...(code ? { invite_code: code } : {}),
+          },
           emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, '') + '/',
         },
       })
 
       if (error) return { error: getAuthErrorMessage(error, 'register') }
 
-      // Supabase devuelve identities vacío si el correo ya existe
       if (data.user?.identities?.length === 0) {
         return {
           error:
@@ -165,6 +185,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.session?.user) {
         await loadProfile(data.session.user.id)
+        if (code && check) {
+          return {
+            success: `Cuenta creada${check.clientName ? ` para ${check.clientName}` : ''}. Ya puede acceder a su portal.`,
+          }
+        }
         return {
           success:
             'Cuenta creada. Un abogado del despacho debe autorizar tu acceso antes de que puedas entrar al sistema.',
@@ -172,6 +197,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data.user) {
+        if (code) {
+          return {
+            success:
+              'Cuenta creada. Confirma tu correo si se solicita y luego inicia sesión en Acceso cliente.',
+          }
+        }
         return {
           success:
             'Cuenta creada. Confirma tu correo si se solicita. Luego un abogado debe autorizar tu acceso en Autorizaciones.',

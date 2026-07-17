@@ -40,7 +40,16 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/buscar', icon: Search, label: 'Buscar' },
 ]
 
+export function isClientPortalUser(role?: UserRole): boolean {
+  return role === 'cliente'
+}
+
+export function isInternalStaff(role?: UserRole): boolean {
+  return role === 'admin' || role === 'abogado' || role === 'asistente'
+}
+
 export function navItemsForRole(role?: UserRole): NavItem[] {
+  if (isClientPortalUser(role)) return []
   return NAV_ITEMS.filter((item) => !item.roles || (role && item.roles.includes(role)))
 }
 
@@ -52,6 +61,11 @@ export function mobileNavItems(role?: UserRole): NavItem[] {
 
 export function canWrite(role?: UserRole): boolean {
   return role === 'admin' || role === 'abogado'
+}
+
+/** Cliente portal: puede subir documentos de su empresa */
+export function canUploadAsClient(role?: UserRole): boolean {
+  return role === 'cliente'
 }
 
 export function canDelete(role?: UserRole): boolean {

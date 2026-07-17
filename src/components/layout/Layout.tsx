@@ -100,7 +100,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             Configuración
           </Link>
           <div className="user-info">
-            <NotificationBell />
+            <NotificationBell placement="footer" />
             <div className="user-avatar">{profile?.full_name?.charAt(0) ?? 'A'}</div>
             <div>
               <strong>{profile?.full_name ?? 'Usuario'}</strong>

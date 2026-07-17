@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { Layout } from './components/layout/Layout'
+import { ClientPortalLayout } from './components/layout/ClientPortalLayout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { ClientsPage } from './pages/ClientsPage'
@@ -20,15 +21,26 @@ import { ApprovalsPage } from './pages/ApprovalsPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 import { PendingAccountPage, RejectedAccountPage } from './pages/PendingAccountPage'
 import { ClientPortalPage } from './pages/ClientPortalPage'
-import { isAccountPending, isAccountRejected } from './lib/permissions'
+import { ClientPortalHomePage } from './pages/ClientPortalHomePage'
+import { isAccountPending, isAccountRejected, isClientPortalUser } from './lib/permissions'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function StaffProtectedRoute({ children }: { children: React.ReactNode }) {
   const { profile, loading } = useAuth()
   if (loading) return <div className="loading-screen">Cargando...</div>
   if (!profile) return <Navigate to="/login" replace />
+  if (isClientPortalUser(profile.role)) return <Navigate to="/mi-portal" replace />
   if (isAccountRejected(profile)) return <RejectedAccountPage />
   if (isAccountPending(profile)) return <PendingAccountPage />
   return <Layout>{children}</Layout>
+}
+
+function ClientProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { profile, loading } = useAuth()
+  if (loading) return <div className="loading-screen">Cargando...</div>
+  if (!profile) return <Navigate to="/login?modo=cliente" replace />
+  if (!isClientPortalUser(profile.role)) return <Navigate to="/" replace />
+  if (isAccountRejected(profile)) return <RejectedAccountPage />
+  return <ClientPortalLayout>{children}</ClientPortalLayout>
 }
 
 function AppRoutes() {
@@ -38,22 +50,23 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/portal/:token" element={<ClientPortalPage />} />
-      <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/clientes" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
-      <Route path="/clientes/:id" element={<ProtectedRoute><ClientDetailPage /></ProtectedRoute>} />
-      <Route path="/expedientes" element={<ProtectedRoute><ExpedientesPage /></ProtectedRoute>} />
-      <Route path="/expedientes/:id" element={<ProtectedRoute><ExpedienteDetailPage /></ProtectedRoute>} />
-      <Route path="/kyc" element={<ProtectedRoute><KycPage /></ProtectedRoute>} />
-      <Route path="/operaciones" element={<ProtectedRoute><OperationsPage /></ProtectedRoute>} />
-      <Route path="/calendario" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-      <Route path="/alertas" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
-      <Route path="/cumplimiento" element={<ProtectedRoute><CompliancePage /></ProtectedRoute>} />
-      <Route path="/autorizaciones" element={<ProtectedRoute><ApprovalsPage /></ProtectedRoute>} />
-      <Route path="/bitacora" element={<ProtectedRoute><ActivityLogPage /></ProtectedRoute>} />
-      <Route path="/reportes" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-      <Route path="/biblioteca" element={<ProtectedRoute><LegalLibraryPage /></ProtectedRoute>} />
-      <Route path="/buscar" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
-      <Route path="/configuracion" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+      <Route path="/mi-portal" element={<ClientProtectedRoute><ClientPortalHomePage /></ClientProtectedRoute>} />
+      <Route path="/" element={<StaffProtectedRoute><DashboardPage /></StaffProtectedRoute>} />
+      <Route path="/clientes" element={<StaffProtectedRoute><ClientsPage /></StaffProtectedRoute>} />
+      <Route path="/clientes/:id" element={<StaffProtectedRoute><ClientDetailPage /></StaffProtectedRoute>} />
+      <Route path="/expedientes" element={<StaffProtectedRoute><ExpedientesPage /></StaffProtectedRoute>} />
+      <Route path="/expedientes/:id" element={<StaffProtectedRoute><ExpedienteDetailPage /></StaffProtectedRoute>} />
+      <Route path="/kyc" element={<StaffProtectedRoute><KycPage /></StaffProtectedRoute>} />
+      <Route path="/operaciones" element={<StaffProtectedRoute><OperationsPage /></StaffProtectedRoute>} />
+      <Route path="/calendario" element={<StaffProtectedRoute><CalendarPage /></StaffProtectedRoute>} />
+      <Route path="/alertas" element={<StaffProtectedRoute><AlertsPage /></StaffProtectedRoute>} />
+      <Route path="/cumplimiento" element={<StaffProtectedRoute><CompliancePage /></StaffProtectedRoute>} />
+      <Route path="/autorizaciones" element={<StaffProtectedRoute><ApprovalsPage /></StaffProtectedRoute>} />
+      <Route path="/bitacora" element={<StaffProtectedRoute><ActivityLogPage /></StaffProtectedRoute>} />
+      <Route path="/reportes" element={<StaffProtectedRoute><ReportsPage /></StaffProtectedRoute>} />
+      <Route path="/biblioteca" element={<StaffProtectedRoute><LegalLibraryPage /></StaffProtectedRoute>} />
+      <Route path="/buscar" element={<StaffProtectedRoute><SearchPage /></StaffProtectedRoute>} />
+      <Route path="/configuracion" element={<StaffProtectedRoute><SettingsPage /></StaffProtectedRoute>} />
       <Route path="*" element={<Navigate to={isDemo ? '/login' : '/'} replace />} />
     </Routes>
   )

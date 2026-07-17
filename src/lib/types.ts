@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'abogado' | 'asistente'
+export type UserRole = 'admin' | 'abogado' | 'asistente' | 'cliente'
 
 export type ClientType = 'persona_fisica' | 'persona_moral'
 export type RiskLevel = 'bajo' | 'medio' | 'alto' | 'critico'
@@ -320,6 +320,21 @@ export interface Profile {
   email: string
   role: UserRole
   account_status?: AccountStatus
+  client_id?: string
+  created_at: string
+}
+
+export interface ClientPortalInvite {
+  id: string
+  client_id: string
+  invite_code: string
+  intended_email?: string
+  label?: string
+  expires_at: string
+  created_by?: string
+  used_at?: string
+  used_by?: string
+  revoked_at?: string
   created_at: string
 }
 
@@ -574,6 +589,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Administrador',
   abogado: 'Abogado',
   asistente: 'Asistente',
+  cliente: 'Portal cliente',
 }
 
 export const VULNERABLE_ACTIVITIES = [

@@ -2170,3 +2170,100 @@ export async function uploadViaPortal(
     r.error ? { error: r.error } : {},
   )
 }
+
+function generateInviteCode(): string {
+  const chunk = crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase()
+  return `PLD-${chunk}`
+}
+
+export async function validateClientInvite(code: string): Promise<{
+  valid?: boolean
+  clientId?: string
+  clientName?: string
+  intendedEmail?: string
+  label?: string
+  error?: string
+}> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { data, error } = await supabase.rpc('validate_client_invite', { p_code: code.trim().toUpperCase() })
+  if (error) {
+    if (error.message.includes('validate_client_invite')) {
+      return { error: 'Falta migración de portal cliente. Ejecuta migration-client-portal-access.sql en Supabase.' }
+    }
+    return { error: error.message }
+  }
+  const row = data as Record<string, unknown>
+  if (!row?.valid) return { error: String(row?.error ?? 'Código no válido') }
+  return {
+    valid: true,
+    clientId: String(row.client_id),
+    clientName: String(row.client_name),
+    intendedEmail: row.intended_email ? String(row.intended_email) : undefined,
+    label: row.label ? String(row.label) : undefined,
+  }
+}
+
+export async function createClientPortalInvite(
+  clientId: string,
+  intendedEmail: string | undefined,
+  daysValid: number,
+  userId?: string,
+): Promise<{ code?: string; expiresAt?: string; error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const expires = new Date()
+  expires.setDate(expires.getDate() + daysValid)
+  const inviteCode = generateInviteCode()
+
+  const { data, error } = await supabase
+    .from('client_portal_invites')
+    .insert({
+      client_id: clientId,
+      invite_code: inviteCode,
+      intended_email: intendedEmail?.trim() || null,
+      label: 'Oficial de cumplimiento',
+      expires_at: expires.toISOString(),
+      created_by: userId ?? null,
+    })
+    .select('invite_code, expires_at')
+    .single()
+
+  if (error) {
+    if (error.message.includes('client_portal_invites')) {
+      return { error: 'Falta migración de portal cliente. Ejecuta migration-client-portal-access.sql en Supabase.' }
+    }
+    return { error: error.message }
+  }
+
+  await supabase.from('activity_log').insert({
+    client_id: clientId,
+    user_id: userId ?? null,
+    action: 'invitacion_portal_cliente',
+    description: `Generó código de acceso portal (${inviteCode})`,
+  })
+
+  return { code: data.invite_code, expiresAt: data.expires_at }
+}
+
+export async function fetchClientPortalSummary(clientId: string): Promise<{
+  client?: import('./types').Client
+  expedientes?: import('./types').Expediente[]
+  kycRecords?: import('./types').KycRecord[]
+  error?: string
+}> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+
+  const [clientRes, expRes, kycRes] = await Promise.all([
+    supabase.from('clients').select('*').eq('id', clientId).maybeSingle(),
+    supabase.from('expedientes').select('*').eq('client_id', clientId).order('updated_at', { ascending: false }),
+    supabase.from('kyc_records').select('*').eq('client_id', clientId).order('updated_at', { ascending: false }),
+  ])
+
+  if (clientRes.error) return { error: clientRes.error.message }
+  if (!clientRes.data) return { error: 'Cliente no encontrado' }
+
+  return {
+    client: clientRes.data as import('./types').Client,
+    expedientes: (expRes.data ?? []) as import('./types').Expediente[],
+    kycRecords: (kycRes.data ?? []) as import('./types').KycRecord[],
+  }
+}

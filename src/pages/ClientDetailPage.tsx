@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, Link2, Mail, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, KeyRound, Mail, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -12,7 +12,7 @@ import { ClientCompliancePanel } from '../components/clients/ClientCompliancePan
 import { ClientOperationsPanel } from '../components/operations/ClientOperationsPanel'
 import { RiskMatrixPanel } from '../components/kyc/RiskMatrixPanel'
 import { SanctionsPanel } from '../components/kyc/SanctionsPanel'
-import { deleteClient, exportClientBundleZip, createClientPortalToken } from '../lib/api'
+import { deleteClient, exportClientBundleZip, createClientPortalInvite } from '../lib/api'
 import { getClientCompliance } from '../lib/compliance'
 import { useAuth } from '../context/AuthContext'
 import { useProtectedAction } from '../hooks/useProtectedAction'
@@ -30,8 +30,9 @@ import {
 } from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { DocumentsPanel } from '../components/documents/DocumentsPanel'
-import { canDelete as roleCanDelete, canExportBundle, needsApprovalForSensitive } from '../lib/permissions'
+import { canDelete as roleCanDelete, canExportBundle, canWrite, needsApprovalForSensitive } from '../lib/permissions'
 import { formatDate } from '../lib/utils'
+import { ClientAccessInviteModal } from './ClientPortalPage'
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -53,6 +54,10 @@ export function ClientDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [actionInfo, setActionInfo] = useState('')
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteGenerating, setInviteGenerating] = useState(false)
+  const [inviteResult, setInviteResult] = useState<{ code: string; expiresAt: string } | undefined>()
+  const [inviteError, setInviteError] = useState('')
   const { runSensitiveAction, requiresApproval } = useProtectedAction()
 
   const canDelete = roleCanDelete(profile?.role) || needsApprovalForSensitive(profile?.role)
@@ -102,16 +107,15 @@ export function ClientDetailPage() {
           <Button variant="secondary" onClick={() => setEmailOpen(true)}>
             <Mail size={16} /> Correo
           </Button>
-          <Button variant="secondary" onClick={async () => {
-            const r = await createClientPortalToken(client.id, 'Documentos KYC', 7, user?.id)
-            if (r.error) setActionInfo(r.error)
-            else if (r.url) {
-              await navigator.clipboard.writeText(r.url)
-              setActionInfo('Enlace portal copiado (válido 7 días). Envíalo al cliente.')
-            }
-          }}>
-            <Link2 size={16} /> Portal cliente
-          </Button>
+          {canWrite(profile?.role) && (
+            <Button variant="secondary" onClick={() => {
+              setInviteOpen(true)
+              setInviteResult(undefined)
+              setInviteError('')
+            }}>
+              <KeyRound size={16} /> Acceso portal
+            </Button>
+          )}
           {canExport && (
             <Button variant="secondary" disabled={exporting} onClick={async () => {
               setExporting(true)
@@ -263,6 +267,23 @@ export function ClientDetailPage() {
           } else if (!result.error) navigate('/clientes')
         }}
         onCancel={() => setDeleteOpen(false)}
+      />
+
+      <ClientAccessInviteModal
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        clientName={client.name}
+        generating={inviteGenerating}
+        result={inviteResult}
+        error={inviteError}
+        onGenerate={async (email) => {
+          setInviteGenerating(true)
+          setInviteError('')
+          const r = await createClientPortalInvite(client.id, email, 30, user?.id)
+          setInviteGenerating(false)
+          if (r.error) setInviteError(r.error)
+          else if (r.code && r.expiresAt) setInviteResult({ code: r.code, expiresAt: r.expiresAt })
+        }}
       />
     </div>
   )
