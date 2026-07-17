@@ -7,23 +7,35 @@ const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+interface MatchRow {
+  score: number
+  name: string
+  topics: string[]
+  datasets: string[]
+}
+
 interface MatchQuery {
   schema: string
   properties: Record<string, string[]>
 }
 
+const RISK_TOPICS = /sanction|crime|debarment|wanted|pep|role\.pep|poi|corp\.disqual|freeze/i
+
 async function matchCollection(
   collection: string,
   query: MatchQuery,
   apiKey: string,
-): Promise<Array<{ score: number; name: string; topics: string[]; datasets: string[] }>> {
-  const res = await fetch(`${API_BASE}/match/${collection}?limit=10`, {
+): Promise<MatchRow[]> {
+  const res = await fetch(`${API_BASE}/match/${collection}?limit=15`, {
     method: 'POST',
     headers: {
       Authorization: `ApiKey ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ queries: { q1: query } }),
+    body: JSON.stringify({
+      queries: { q1: query },
+      thresholds: { q1: [0.5, 0.7, 0.9] },
+    }),
   })
 
   if (!res.ok) {
@@ -36,34 +48,86 @@ async function matchCollection(
 
   return results.map((r: Record<string, unknown>) => {
     const props = (r.properties ?? {}) as Record<string, string[]>
+    const topics = props.topics ?? []
     return {
       score: (r.score as number) ?? 0,
-      name: props.name?.[0] ?? 'Sin nombre',
-      topics: props.topics ?? [],
+      name: props.name?.[0] ?? props.firstName?.[0] ?? 'Sin nombre',
+      topics,
       datasets: (r.datasets as string[]) ?? [],
     }
   })
 }
 
-function buildQuery(name: string, clientType: string, rfc?: string): MatchQuery {
+function buildQueries(name: string, clientType: string, rfc?: string): MatchQuery[] {
+  const trimmed = name.trim()
   const schema = clientType === 'persona_fisica' ? 'Person' : 'Company'
-  const properties: Record<string, string[]> = { name: [name.trim()] }
-  if (rfc) properties.registrationNumber = [rfc.trim().toUpperCase()]
-  if (clientType === 'persona_moral') properties.country = ['mx']
-  return { schema, properties }
+  const queries: MatchQuery[] = [
+    { schema, properties: { name: [trimmed] } },
+  ]
+
+  if (clientType === 'persona_fisica') {
+    const parts = trimmed.split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      queries.push({
+        schema: 'Person',
+        properties: {
+          firstName: [parts[0]],
+          lastName: [parts.slice(1).join(' ')],
+        },
+      })
+      queries.push({ schema: 'Person', properties: { lastName: [parts[parts.length - 1]] } })
+    }
+  }
+
+  if (rfc) {
+    queries.push({
+      schema,
+      properties: {
+        name: [trimmed],
+        registrationNumber: [rfc.trim().toUpperCase()],
+      },
+    })
+  }
+
+  if (clientType === 'persona_moral') {
+    queries[0].properties.country = ['mx']
+  }
+
+  return queries
 }
 
-function resultFromMatch(
+async function searchAll(
+  collection: string,
+  queries: MatchQuery[],
+  apiKey: string,
+): Promise<MatchRow[]> {
+  const batches = await Promise.all(queries.map((q) => matchCollection(collection, q, apiKey)))
+  const merged = batches.flat()
+  const byName = new Map<string, MatchRow>()
+  for (const row of merged) {
+    const key = row.name.toLowerCase()
+    const prev = byName.get(key)
+    if (!prev || row.score > prev.score) byName.set(key, row)
+  }
+  return [...byName.values()].sort((a, b) => b.score - a.score)
+}
+
+function isRiskMatch(row: MatchRow): boolean {
+  return row.score >= 0.42 || row.topics.some((t) => RISK_TOPICS.test(t))
+}
+
+function resultFromMatches(
   list: string,
   label: string,
-  matches: Array<{ score: number; name: string; topics: string[]; datasets: string[] }>,
-  threshold = 0.55,
+  matches: MatchRow[],
+  threshold = 0.42,
 ) {
   const now = new Date().toISOString()
+  const best = matches[0]
+  const flagged = matches.filter(isRiskMatch)
   const top = matches.filter((m) => m.score >= threshold)
 
-  if (top.length === 0) {
-    const best = matches[0]
+  if (top.length === 0 && flagged.length === 0) {
     return {
       list,
       label,
@@ -71,23 +135,23 @@ function resultFromMatch(
       match: false,
       score: best ? Math.round(best.score * 100) : 0,
       details: best
-        ? `Mejor candidato: "${best.name}" (${Math.round(best.score * 100)}%) — bajo umbral ${Math.round(threshold * 100)}%.`
+        ? `Sin alerta. Mejor candidato: "${best.name}" (${Math.round(best.score * 100)}%).`
         : `Sin candidatos en ${label}.`,
       source: 'opensanctions',
     }
   }
 
-  const best = top[0]
+  const hit = top[0] ?? flagged[0]
   return {
     list,
     label,
     checked_at: now,
     match: true,
-    score: Math.round(best.score * 100),
-    matched_name: best.name,
-    topics: best.topics,
-    datasets: best.datasets,
-    details: `⚠ Coincidencia: "${best.name}" (${Math.round(best.score * 100)}%). Temas: ${best.topics.join(', ') || 'N/A'}. Revisar manualmente.`,
+    score: Math.round(hit.score * 100),
+    matched_name: hit.name,
+    topics: hit.topics,
+    datasets: hit.datasets,
+    details: `⚠ Coincidencia: "${hit.name}" (${Math.round(hit.score * 100)}%). Temas: ${hit.topics.join(', ') || 'lista de riesgo'}. Revisar manualmente.`,
     source: 'opensanctions',
   }
 }
@@ -101,9 +165,7 @@ serve(async (req) => {
     const apiKey = Deno.env.get('OPENSANCTIONS_API_KEY')
     if (!apiKey) {
       return new Response(
-        JSON.stringify({
-          error: 'Falta OPENSANCTIONS_API_KEY en Supabase → Project Settings → Edge Functions → Secrets',
-        }),
+        JSON.stringify({ error: 'Falta OPENSANCTIONS_API_KEY en Supabase Secrets' }),
         { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } },
       )
     }
@@ -116,35 +178,38 @@ serve(async (req) => {
       })
     }
 
-    const query = buildQuery(name, clientType ?? 'persona_fisica', rfc)
+    const queries = buildQueries(name, clientType ?? 'persona_fisica', rfc)
 
     const [defaultAll, sanctions, peps] = await Promise.all([
-      matchCollection('default', query, apiKey),
-      matchCollection('sanctions', query, apiKey),
-      matchCollection('peps', query, apiKey),
+      searchAll('default', queries, apiKey),
+      searchAll('sanctions', queries, apiKey),
+      searchAll('peps', queries, apiKey),
     ])
 
-    const allSanctions = [...defaultAll, ...sanctions].sort((a, b) => b.score - a.score)
+    const allSanctions = [...defaultAll, ...sanctions]
+      .sort((a, b) => b.score - a.score)
+      .filter((v, i, arr) => arr.findIndex((x) => x.name === v.name) === i)
+
     const satMatches = allSanctions.filter(
       (m) =>
         m.datasets.some((d) => /mx|sat|69|mexico/i.test(d)) ||
-        m.topics.some((t) => /crime|debarment|sanction|wanted/i.test(t)),
+        m.topics.some((t) => RISK_TOPICS.test(t)),
     )
 
     const results = [
-      resultFromMatch('ofac', 'Sanciones internacionales (OFAC/ONU/SDN)', allSanctions, 0.55),
-      resultFromMatch(
+      resultFromMatches('ofac', 'Sanciones internacionales (OFAC/ONU/SDN)', allSanctions),
+      resultFromMatches(
         'sat_69b',
         'SAT / Listas México y delitos',
         satMatches.length ? satMatches : allSanctions,
-        0.55,
       ),
-      resultFromMatch('un', 'PEP — Personas políticamente expuestas', peps, 0.5),
+      resultFromMatches('un', 'PEP — Personas políticamente expuestas', peps, 0.38),
     ]
 
-    return new Response(JSON.stringify({ results }), {
-      headers: { ...cors, 'Content-Type': 'application/json' },
-    })
+    return new Response(
+      JSON.stringify({ results, queried_name: name.trim(), engine: 'opensanctions-live' }),
+      { headers: { ...cors, 'Content-Type': 'application/json' } },
+    )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido'
     return new Response(JSON.stringify({ error: message }), {

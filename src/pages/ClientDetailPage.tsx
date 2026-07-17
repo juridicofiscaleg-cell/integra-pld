@@ -125,11 +125,9 @@ export function ClientDetailPage() {
           )}
         </section>
 
-        {latestKyc && (
-          <section className="card">
-            <SanctionsPanel kyc={latestKyc} client={client} onUpdated={refetchKyc} />
-          </section>
-        )}
+        <section className="card">
+          <SanctionsPanel client={client} kyc={latestKyc ?? null} onUpdated={refetchKyc} />
+        </section>
 
         <section className="card full-width">
           <h2>Documentos del cliente</h2>

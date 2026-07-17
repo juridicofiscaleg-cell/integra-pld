@@ -828,7 +828,9 @@ a:hover { text-decoration: underline; }
 }
 
 .sanctions-row.clear { border-left: 3px solid var(--success); }
+.sanctions-row.review { border-left: 3px solid var(--warning); background: var(--warning-bg); }
 .sanctions-row.match { border-left: 3px solid var(--danger); background: var(--danger-bg); }
+.sanctions-summary.review { background: var(--warning-bg); color: var(--warning); }
 .sanctions-row strong { display: block; margin-bottom: 0.25rem; }
 .sanctions-row p { color: var(--text-muted); margin: 0.25rem 0; }
 .sanctions-row small { color: var(--text-light); }

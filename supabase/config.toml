@@ -1,0 +1,7 @@
+project_id = "cglsgbowfiwbbpiwgfgs"
+
+[api]
+enabled = true
+
+[functions.sanctions-check]
+verify_jwt = false
