@@ -5,6 +5,7 @@ import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
 import { createKyc } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import { BeneficialOwnersEditor } from './BeneficialOwnersEditor'
 import { PepQuestionnairePanel } from './PepQuestionnairePanel'
 import type { BeneficialOwner, Client, Expediente, KycChecklist, PepQuestionnaire } from '../../lib/types'
@@ -23,6 +24,7 @@ const emptyChecklist = (): KycChecklist =>
 
 export function NewKycModal({ open, onClose, clients, expedientes, onCreated }: NewKycModalProps) {
   const { user } = useAuth()
+  const { runProtectedAction } = useProtectedAction()
   const [clientId, setClientId] = useState('')
   const [expedienteId, setExpedienteId] = useState('')
   const [checklist, setChecklist] = useState<KycChecklist>(emptyChecklist())
@@ -70,25 +72,39 @@ export function NewKycModal({ open, onClose, clients, expedientes, onCreated }: 
     setError('')
 
     const pepFinal = pepQuestionnaire.is_pep || pep
-    const result = await createKyc(
-      {
-        client_id: clientId,
-        expediente_id: expedienteId || undefined,
-        checklist,
-        pep: pepFinal,
-        sanctions_check: sanctionsCheck,
-        beneficial_owner: beneficialOwner,
-        beneficial_owners: beneficialOwners,
-        pep_questionnaire: pepQuestionnaire,
-        review_notes: reviewNotes,
-        status: 'en_revision',
+    const kycData = {
+      client_id: clientId,
+      expediente_id: expedienteId || undefined,
+      checklist,
+      pep: pepFinal,
+      sanctions_check: sanctionsCheck,
+      beneficial_owner: beneficialOwner,
+      beneficial_owners: beneficialOwners,
+      pep_questionnaire: pepQuestionnaire,
+      review_notes: reviewNotes,
+      status: 'en_revision' as const,
+    }
+
+    const result = await runProtectedAction({
+      actionType: 'create_kyc',
+      title: `Crear KYC — ${clients.find((c) => c.id === clientId)?.name ?? 'Cliente'}`,
+      clientId,
+      payload: { kycData },
+      direct: async () => {
+        const r = await createKyc(kycData, user?.id)
+        return r.error ? { error: r.error } : {}
       },
-      user?.id,
-    )
+    })
 
     setSubmitting(false)
     if (result.error) {
       setError(result.error)
+      return
+    }
+    if (result.pending) {
+      alert('Solicitud enviada. El abogado la revisará en Autorizaciones.')
+      reset()
+      onClose()
       return
     }
 

@@ -23,6 +23,7 @@ export function ApprovalsPage() {
   const [filter, setFilter] = useState<'pendiente' | 'all'>('pendiente')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const [messageError, setMessageError] = useState(false)
 
   const canReview = canReviewApprovals(profile?.role)
   const shown = filter === 'pendiente' ? pending : requests
@@ -44,12 +45,21 @@ export function ApprovalsPage() {
       : undefined
     setBusyId(req.id)
     setMessage('')
-    const result = await reviewApprovalRequest(req.id, decision, notes, user?.id)
-    setBusyId(null)
-    if (result.error) setMessage(result.error)
-    else {
-      setMessage(decision === 'aprobada' ? 'Solicitud aprobada y ejecutada.' : 'Solicitud rechazada.')
-      refetch()
+    setMessageError(false)
+    try {
+      const result = await reviewApprovalRequest(req.id, decision, notes, user?.id)
+      if (result.error) {
+        setMessage(result.error)
+        setMessageError(true)
+      } else {
+        setMessage(decision === 'aprobada' ? 'Solicitud aprobada y ejecutada.' : 'Solicitud rechazada.')
+        await refetch({ silent: true })
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Error al procesar la solicitud')
+      setMessageError(true)
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -60,7 +70,7 @@ export function ApprovalsPage() {
           <h1>Autorizaciones</h1>
           <p>
             {canReview
-              ? 'Revisa solicitudes de tu auxiliar antes de ejecutar acciones sensibles'
+              ? 'Revisa solicitudes de tu auxiliar y cuentas nuevas antes de ejecutar acciones sensibles'
               : 'Tus solicitudes pendientes de revisión por un abogado'}
           </p>
         </div>
@@ -74,7 +84,11 @@ export function ApprovalsPage() {
         </div>
       </header>
 
-      {message && <p className="form-success compliance-banner">{message}</p>}
+      {message && (
+        <p className={messageError ? 'form-error compliance-banner' : 'form-success compliance-banner'}>
+          {message}
+        </p>
+      )}
 
       {loading ? (
         <p className="loading">Cargando...</p>

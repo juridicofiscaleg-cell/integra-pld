@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Camera, Download, FileText, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
-import { deleteDocument, getDocumentUrl, getLegalResourceUrl, replaceDocument, uploadDocument } from '../../lib/api'
+import { deleteDocument, getDocumentUrl, getLegalResourceUrl, replaceDocument, uploadDocument, uploadToPendingStorage } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import { useDocuments, useLegalResources } from '../../hooks/useData'
 import { useProtectedAction } from '../../hooks/useProtectedAction'
@@ -37,17 +37,47 @@ export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanel
     setUploading(true)
     setError('')
     setInfo('')
-    const result = await uploadDocument(
-      file,
-      {
-        expediente_id: expedienteId,
-        client_id: clientId,
-        kyc_id: kycId,
-        doc_type: docType,
-        legal_resource_id: templateId || undefined,
-      },
-      user?.id,
-    )
+    const meta = {
+      expediente_id: expedienteId,
+      client_id: clientId,
+      kyc_id: kycId,
+      doc_type: docType,
+      legal_resource_id: templateId || undefined,
+    }
+
+    if (requiresApproval('upload_document') && user?.id) {
+      const pending = await uploadToPendingStorage(file, user.id)
+      if (pending.error) {
+        setUploading(false)
+        setError(pending.error)
+        return
+      }
+      const result = await runSensitiveAction({
+        actionType: 'upload_document',
+        title: `Subir documento: ${file.name}`,
+        clientId,
+        payload: {
+          pendingStoragePath: pending.pendingPath,
+          fileName: file.name,
+          fileSize: file.size,
+          meta,
+        },
+        direct: async () => {
+          const r = await uploadDocument(file, meta, user?.id)
+          return r.error ? { error: r.error } : {}
+        },
+      })
+      setUploading(false)
+      if (result.error) setError(result.error)
+      else if (result.pending) setInfo('Subida enviada a Autorizaciones.')
+      else {
+        setInfo('Documento subido correctamente.')
+        refetch()
+      }
+      return
+    }
+
+    const result = await uploadDocument(file, meta, user?.id)
     setUploading(false)
     if (result.error) {
       setError(result.error)
@@ -60,6 +90,33 @@ export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanel
   async function handleReplace(docId: string, storagePath: string, file: File) {
     setUploading(true)
     setError('')
+    if (requiresApproval('replace_document') && user?.id) {
+      const pending = await uploadToPendingStorage(file, user.id)
+      if (pending.error) {
+        setUploading(false)
+        setError(pending.error)
+        return
+      }
+      const result = await runSensitiveAction({
+        actionType: 'replace_document',
+        title: `Reemplazar documento: ${file.name}`,
+        clientId,
+        payload: {
+          docId,
+          oldStoragePath: storagePath,
+          pendingStoragePath: pending.pendingPath,
+          fileName: file.name,
+          fileSize: file.size,
+        },
+        direct: () => replaceDocument(docId, storagePath, file, user?.id),
+      })
+      setUploading(false)
+      setReplacingId(null)
+      if (result.error) setError(result.error)
+      else if (result.pending) setInfo('Reemplazo enviado a Autorizaciones.')
+      else refetch()
+      return
+    }
     const result = await replaceDocument(docId, storagePath, file, user?.id)
     setUploading(false)
     setReplacingId(null)

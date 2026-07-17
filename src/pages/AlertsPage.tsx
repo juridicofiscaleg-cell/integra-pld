@@ -7,6 +7,7 @@ import { FilterBar } from '../components/ui/FilterBar'
 import { NewAlertModal } from '../components/alerts/NewAlertModal'
 import { resolveAlert, resolveAllAlerts } from '../lib/api'
 import { useAlerts, useClients, useExpedientes, useProfiles } from '../hooks/useData'
+import { useProtectedAction } from '../hooks/useProtectedAction'
 import { formatDate, isOverdue } from '../lib/utils'
 
 const alertTypeLabels: Record<string, string> = {
@@ -22,6 +23,7 @@ export function AlertsPage() {
   const { clients } = useClients()
   const { expedientes } = useExpedientes()
   const { profiles } = useProfiles()
+  const { runProtectedAction } = useProtectedAction()
   const [resolving, setResolving] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -35,9 +37,17 @@ export function AlertsPage() {
 
   async function handleResolve(alertId: string) {
     setResolving(alertId)
-    await resolveAlert(alertId)
+    const alertRow = alerts.find((a) => a.id === alertId)
+    const result = await runProtectedAction({
+      actionType: 'resolve_alert',
+      title: `Resolver alerta: ${alertRow?.title ?? alertId}`,
+      clientId: alertRow?.client_id,
+      payload: { alertId },
+      direct: () => resolveAlert(alertId),
+    })
     setResolving(null)
-    refetch()
+    if (result.pending) window.alert('Resolución enviada a Autorizaciones.')
+    else refetch()
   }
 
   async function handleResolveAll() {

@@ -31,7 +31,10 @@ export type NoticeStatus = 'borrador' | 'presentado' | 'archivado'
 
 export type ApprovalStatus = 'pendiente' | 'aprobada' | 'rechazada'
 
+export type AccountStatus = 'pendiente' | 'activo' | 'rechazado'
+
 export type ApprovalActionType =
+  | 'approve_account'
   | 'delete_client'
   | 'delete_expediente'
   | 'delete_kyc'
@@ -44,6 +47,30 @@ export type ApprovalActionType =
   | 'delete_legal_resource'
   | 'export_client_bundle'
   | 'approve_kyc'
+  | 'create_client'
+  | 'update_client'
+  | 'create_expediente'
+  | 'update_expediente'
+  | 'create_kyc'
+  | 'update_kyc'
+  | 'renew_kyc'
+  | 'upload_document'
+  | 'replace_document'
+  | 'create_operation'
+  | 'update_operation'
+  | 'create_notice'
+  | 'update_notice'
+  | 'create_compliance_officer'
+  | 'update_compliance_officer'
+  | 'upload_compliance_manual'
+  | 'create_training'
+  | 'update_training'
+  | 'upload_legal_resource'
+  | 'update_risk_matrix'
+  | 'advance_stage'
+  | 'update_stage_notes'
+  | 'create_alert'
+  | 'resolve_alert'
 
 export interface ApprovalRequest {
   id: string
@@ -64,6 +91,7 @@ export interface ApprovalRequest {
 }
 
 export const APPROVAL_ACTION_LABELS: Record<ApprovalActionType, string> = {
+  approve_account: 'Autorizar cuenta nueva',
   delete_client: 'Eliminar cliente',
   delete_expediente: 'Eliminar expediente',
   delete_kyc: 'Eliminar KYC',
@@ -76,6 +104,30 @@ export const APPROVAL_ACTION_LABELS: Record<ApprovalActionType, string> = {
   delete_legal_resource: 'Eliminar recurso',
   export_client_bundle: 'Exportar expediente PLD',
   approve_kyc: 'Aprobar KYC',
+  create_client: 'Registrar cliente',
+  update_client: 'Editar cliente',
+  create_expediente: 'Crear expediente',
+  update_expediente: 'Editar expediente',
+  create_kyc: 'Crear KYC',
+  update_kyc: 'Editar KYC',
+  renew_kyc: 'Renovar KYC',
+  upload_document: 'Subir documento',
+  replace_document: 'Reemplazar documento',
+  create_operation: 'Registrar operación',
+  update_operation: 'Editar operación',
+  create_notice: 'Registrar aviso',
+  update_notice: 'Editar aviso',
+  create_compliance_officer: 'Registrar oficial',
+  update_compliance_officer: 'Editar oficial',
+  upload_compliance_manual: 'Subir manual PLD',
+  create_training: 'Registrar capacitación',
+  update_training: 'Editar capacitación',
+  upload_legal_resource: 'Subir recurso biblioteca',
+  update_risk_matrix: 'Actualizar matriz de riesgo',
+  advance_stage: 'Avanzar etapa',
+  update_stage_notes: 'Editar notas de etapa',
+  create_alert: 'Crear alerta',
+  resolve_alert: 'Resolver alerta',
 }
 
 export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -234,6 +286,7 @@ export interface Profile {
   full_name: string
   email: string
   role: UserRole
+  account_status?: AccountStatus
   created_at: string
 }
 

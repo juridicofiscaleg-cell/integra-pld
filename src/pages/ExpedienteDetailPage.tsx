@@ -52,13 +52,20 @@ export function ExpedienteDetailPage() {
   const isClosed = expediente.status === 'cerrado' || expediente.status === 'archivado'
 
   async function handleAdvanceWithNotes(notes: string) {
-    if (!id || pendingStage === null) return
+    if (!id || pendingStage === null || !expediente) return
     setAdvancing(true)
     setError('')
-    const result = await advanceStage(id, pendingStage, user?.id, notes)
+    const result = await runSensitiveAction({
+      actionType: 'advance_stage',
+      title: `Avanzar etapa en: ${expediente.title}`,
+      clientId: expediente.client_id,
+      payload: { expedienteId: id, stageIndex: pendingStage, notes },
+      direct: () => advanceStage(id, pendingStage, user?.id, notes),
+    })
     setAdvancing(false)
     setPendingStage(null)
     if (result.error) setError(result.error)
+    else if (result.pending) setError('Avance de etapa enviado a Autorizaciones.')
     else refetch()
   }
 
@@ -145,8 +152,16 @@ export function ExpedienteDetailPage() {
             onAdvance={(idx) => setPendingStage(idx)}
             onRevert={handleRevert}
             onEditNotes={async (stageId, notes) => {
-              await updateStageNotes(stageId, notes, user?.id)
-              refetch()
+              if (!expediente) return
+              const result = await runSensitiveAction({
+                actionType: 'update_stage_notes',
+                title: `Notas de etapa — ${expediente.title}`,
+                clientId: expediente.client_id,
+                payload: { stageId, notes },
+                direct: () => updateStageNotes(stageId, notes, user?.id),
+              })
+              if (result.pending) setError('Cambio enviado a Autorizaciones.')
+              else refetch()
             }}
           />
         </section>

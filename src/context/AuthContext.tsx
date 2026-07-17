@@ -3,6 +3,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import type { Profile } from '../lib/types'
 import { DEMO_PROFILE } from '../lib/demo-data'
+import { ensureAccountApprovalRequest } from '../lib/api'
 import { getAuthErrorMessage } from '../lib/auth-errors'
 
 interface AuthContextValue {
@@ -76,6 +77,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data) {
       setProfile(data)
+      if (data.account_status === 'pendiente') {
+        void ensureAccountApprovalRequest(data)
+      }
       setLoading(false)
       return
     }
@@ -87,13 +91,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: userId,
           full_name: authUser.user_metadata?.full_name ?? authUser.email?.split('@')[0] ?? 'Usuario',
           email: authUser.email ?? '',
-          role: 'abogado',
+          role: 'asistente',
+          account_status: 'pendiente',
         })
         .select()
         .single()
 
       if (created) {
         setProfile(created)
+        if (created.account_status === 'pendiente') {
+          void ensureAccountApprovalRequest(created)
+        }
         setLoading(false)
         return
       }
@@ -157,13 +165,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.session?.user) {
         await loadProfile(data.session.user.id)
-        return { success: 'Cuenta creada. Entrando...' }
+        return {
+          success:
+            'Cuenta creada. Un abogado del despacho debe autorizar tu acceso antes de que puedas entrar al sistema.',
+        }
       }
 
       if (data.user) {
         return {
           success:
-            'Cuenta creada. Revisa tu correo y confirma el registro. Luego vuelve aquí e inicia sesión.',
+            'Cuenta creada. Confirma tu correo si se solicita. Luego un abogado debe autorizar tu acceso en Autorizaciones.',
         }
       }
 

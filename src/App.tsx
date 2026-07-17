@@ -18,11 +18,15 @@ import { CalendarPage } from './pages/CalendarPage'
 import { CompliancePage } from './pages/CompliancePage'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
+import { PendingAccountPage, RejectedAccountPage } from './pages/PendingAccountPage'
+import { isAccountPending, isAccountRejected } from './lib/permissions'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { profile, loading } = useAuth()
   if (loading) return <div className="loading-screen">Cargando...</div>
   if (!profile) return <Navigate to="/login" replace />
+  if (isAccountRejected(profile)) return <RejectedAccountPage />
+  if (isAccountPending(profile)) return <PendingAccountPage />
   return <Layout>{children}</Layout>
 }
 

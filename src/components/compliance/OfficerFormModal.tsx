@@ -5,6 +5,7 @@ import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
 import { createComplianceOfficer, updateComplianceOfficer } from '../../lib/api'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { Client, ClientComplianceOfficer } from '../../lib/types'
 
 interface OfficerFormModalProps {
@@ -30,6 +31,7 @@ const empty = {
 }
 
 export function OfficerFormModal({ open, officer, clients, initialClientId, onClose, onSaved, userId }: OfficerFormModalProps) {
+  const { runProtectedAction } = useProtectedAction()
   const [form, setForm] = useState(empty)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -89,12 +91,32 @@ export function OfficerFormModal({ open, officer, clients, initialClientId, onCl
     }
 
     const result = officer
-      ? await updateComplianceOfficer(officer.id, payload)
-      : await createComplianceOfficer(payload, userId)
+      ? await runProtectedAction({
+          actionType: 'update_compliance_officer',
+          title: `Editar oficial: ${form.name.trim()}`,
+          clientId: form.client_id,
+          payload: { officerId: officer.id, officerData: payload },
+          direct: () => updateComplianceOfficer(officer.id, payload),
+        })
+      : await runProtectedAction({
+          actionType: 'create_compliance_officer',
+          title: `Registrar oficial: ${form.name.trim()}`,
+          clientId: form.client_id,
+          payload: { officerData: payload },
+          direct: async () => {
+            const r = await createComplianceOfficer(payload, userId)
+            return r.error ? { error: r.error } : {}
+          },
+        })
 
     setSaving(false)
     if (result.error) {
       setError(result.error)
+      return
+    }
+    if (result.pending) {
+      alert('Solicitud enviada a Autorizaciones.')
+      onClose()
       return
     }
     onSaved()

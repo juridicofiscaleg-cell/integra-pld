@@ -9,7 +9,6 @@ import { PepQuestionnairePanel } from './PepQuestionnairePanel'
 import { renewKyc, updateKycExtended } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import { useProtectedAction } from '../../hooks/useProtectedAction'
-import { canApproveKyc } from '../../lib/permissions'
 import type { BeneficialOwner, KycRecord, KycStatus, PepQuestionnaire } from '../../lib/types'
 import { KYC_CHECKLIST_ITEMS, KYC_STATUS_LABELS } from '../../lib/types'
 
@@ -20,7 +19,7 @@ interface EditKycModalProps {
 }
 
 export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
   const { runSensitiveAction } = useProtectedAction()
   const [checklist, setChecklist] = useState(kyc?.checklist ?? {})
   const [status, setStatus] = useState<KycStatus>(kyc?.status ?? 'pendiente')
@@ -77,33 +76,22 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
       sanctions_results: kyc.sanctions_results,
     }
 
-    const needsApproval = status === 'aprobado' && kyc.status !== 'aprobado' && !canApproveKyc(profile?.role)
-
-    if (needsApproval) {
-      const result = await runSensitiveAction({
-        actionType: 'approve_kyc',
-        title: `Aprobar KYC: ${kyc.clients?.name ?? 'Cliente'}`,
-        clientId: kyc.client_id,
-        description: 'Solicitud de aprobación de debida diligencia',
-        payload: { kycId: kyc.id, kycData },
-        direct: async () => updateKycExtended(kyc.id, kycData, user?.id),
-      })
-      setSubmitting(false)
-      if (result.error) setError(result.error)
-      else if (result.pending) {
-        setPendingMsg('Aprobación solicitada al abogado. Mientras tanto el KYC sigue en revisión.')
-      } else {
-        onUpdated()
-        onClose()
-      }
-      return
-    }
-
-    const result = await updateKycExtended(kyc.id, kycData, user?.id)
-
+    const actionType = status === 'aprobado' && kyc.status !== 'aprobado' ? 'approve_kyc' : 'update_kyc'
+    const result = await runSensitiveAction({
+      actionType,
+      title: actionType === 'approve_kyc'
+        ? `Aprobar KYC: ${kyc.clients?.name ?? 'Cliente'}`
+        : `Editar KYC: ${kyc.clients?.name ?? 'Cliente'}`,
+      clientId: kyc.client_id,
+      description: actionType === 'approve_kyc' ? 'Solicitud de aprobación de debida diligencia' : undefined,
+      payload: { kycId: kyc.id, kycData },
+      direct: () => updateKycExtended(kyc.id, kycData, user?.id),
+    })
     setSubmitting(false)
     if (result.error) setError(result.error)
-    else {
+    else if (result.pending) {
+      setPendingMsg('Cambios enviados a Autorizaciones. El abogado los revisará.')
+    } else {
       onUpdated()
       onClose()
     }
@@ -112,9 +100,19 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
   async function handleRenew() {
     if (!kyc) return
     setRenewing(true)
-    const result = await renewKyc(kyc.id, user?.id)
+    const result = await runSensitiveAction({
+      actionType: 'renew_kyc',
+      title: `Renovar KYC: ${kyc.clients?.name ?? 'Cliente'}`,
+      clientId: kyc.client_id,
+      payload: { kycId: kyc.id },
+      direct: async () => {
+        const r = await renewKyc(kyc.id, user?.id)
+        return r.error ? { error: r.error } : {}
+      },
+    })
     setRenewing(false)
     if (result.error) setError(result.error)
+    else if (result.pending) setPendingMsg('Renovación enviada a Autorizaciones.')
     else {
       onUpdated()
       onClose()

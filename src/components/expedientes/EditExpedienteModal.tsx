@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { AssignSelect } from '../ui/AssignSelect'
 import { updateExpediente } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { Expediente, ExpedienteStatus, Priority, Profile } from '../../lib/types'
 import { STATUS_LABELS } from '../../lib/types'
 
@@ -18,6 +19,7 @@ interface EditExpedienteModalProps {
 
 export function EditExpedienteModal({ expediente, profiles, onClose, onUpdated }: EditExpedienteModalProps) {
   const { user } = useAuth()
+  const { runProtectedAction } = useProtectedAction()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<ExpedienteStatus>('activo')
@@ -42,14 +44,20 @@ export function EditExpedienteModal({ expediente, profiles, onClose, onUpdated }
     if (!expediente) return
     setSaving(true)
     setError('')
-    const result = await updateExpediente(
-      expediente.id,
-      { title, description, status, priority, assigned_to: assignedTo || undefined },
-      user?.id,
-    )
+    const expedienteData = { title, description, status, priority, assigned_to: assignedTo || undefined }
+    const result = await runProtectedAction({
+      actionType: 'update_expediente',
+      title: `Editar expediente: ${title.trim()}`,
+      clientId: expediente.client_id,
+      payload: { expedienteId: expediente.id, expedienteData },
+      direct: () => updateExpediente(expediente.id, expedienteData, user?.id),
+    })
     setSaving(false)
     if (result.error) setError(result.error)
-    else {
+    else if (result.pending) {
+      alert('Solicitud enviada. El abogado la revisará en Autorizaciones.')
+      onClose()
+    } else {
       onClose()
       onUpdated()
     }

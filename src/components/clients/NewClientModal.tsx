@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { createClient } from '../../lib/api'
 import { validateCurp, validateRfc } from '../../lib/mexico-validators'
 import { useAuth } from '../../context/AuthContext'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { ClientType, RiskLevel } from '../../lib/types'
 import { RISK_LABELS, VULNERABLE_ACTIVITIES } from '../../lib/types'
 
@@ -17,6 +18,7 @@ interface NewClientModalProps {
 
 export function NewClientModal({ open, onClose, onCreated }: NewClientModalProps) {
   const { user } = useAuth()
+  const { runProtectedAction } = useProtectedAction()
   const [name, setName] = useState('')
   const [clientType, setClientType] = useState<ClientType>('persona_moral')
   const [rfc, setRfc] = useState('')
@@ -69,29 +71,40 @@ export function NewClientModal({ open, onClose, onCreated }: NewClientModalProps
     setSubmitting(true)
     setError('')
 
-    const result = await createClient(
-      {
-        name,
-        client_type: clientType,
-        rfc,
-        curp,
-        email,
-        phone,
-        address,
-        industry,
-        nationality,
-        legal_representative: legalRep,
-        vulnerable_activity: vulnerableActivity,
-        risk_level: riskLevel,
-        notes,
-      },
-      user?.id,
-    )
+    const clientData = {
+      name,
+      client_type: clientType,
+      rfc,
+      curp,
+      email,
+      phone,
+      address,
+      industry,
+      nationality,
+      legal_representative: legalRep,
+      vulnerable_activity: vulnerableActivity,
+      risk_level: riskLevel,
+      notes,
+    }
+
+    const result = await runProtectedAction({
+      actionType: 'create_client',
+      title: `Registrar cliente: ${name.trim()}`,
+      payload: { clientData },
+      direct: () => createClient(clientData, user?.id),
+    })
 
     setSubmitting(false)
 
     if (result.error) {
       setError(result.error)
+      return
+    }
+    if (result.pending) {
+      setError('')
+      alert('Solicitud enviada. El abogado la revisará en Autorizaciones.')
+      reset()
+      onClose()
       return
     }
 

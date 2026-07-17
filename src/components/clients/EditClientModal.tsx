@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { updateClient } from '../../lib/api'
 import { validateCurp, validateRfc } from '../../lib/mexico-validators'
 import { useAuth } from '../../context/AuthContext'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { Client, ClientType, RiskLevel } from '../../lib/types'
 import { RISK_LABELS, VULNERABLE_ACTIVITIES } from '../../lib/types'
 
@@ -17,6 +18,7 @@ interface EditClientModalProps {
 
 export function EditClientModal({ client, onClose, onUpdated }: EditClientModalProps) {
   const { user } = useAuth()
+  const { runProtectedAction } = useProtectedAction()
   const [name, setName] = useState(client?.name ?? '')
   const [clientType, setClientType] = useState<ClientType>(client?.client_type ?? 'persona_moral')
   const [rfc, setRfc] = useState(client?.rfc ?? '')
@@ -50,30 +52,39 @@ export function EditClientModal({ client, onClose, onUpdated }: EditClientModalP
     setSubmitting(true)
     setError('')
 
-    const result = await updateClient(
-      client!.id,
-      {
-        name,
-        client_type: clientType,
-        rfc,
-        curp,
-        email,
-        phone,
-        address,
-        industry,
-        activity_code: activityCode,
-        nationality,
-        legal_representative: legalRep,
-        vulnerable_activity: vulnerableActivity,
-        risk_level: riskLevel,
-        notes,
-      },
-      user?.id,
-    )
+    const clientData = {
+      name,
+      client_type: clientType,
+      rfc,
+      curp,
+      email,
+      phone,
+      address,
+      industry,
+      activity_code: activityCode,
+      nationality,
+      legal_representative: legalRep,
+      vulnerable_activity: vulnerableActivity,
+      risk_level: riskLevel,
+      notes,
+    }
+
+    const result = await runProtectedAction({
+      actionType: 'update_client',
+      title: `Editar cliente: ${name.trim()}`,
+      clientId: client!.id,
+      payload: { clientId: client!.id, clientData },
+      direct: () => updateClient(client!.id, clientData, user?.id),
+    })
 
     setSubmitting(false)
     if (result.error) {
       setError(result.error)
+      return
+    }
+    if (result.pending) {
+      alert('Solicitud enviada. El abogado la revisará en Autorizaciones.')
+      onClose()
       return
     }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { createApprovalRequest, fetchApprovalRequests } from '../lib/api'
+import { fetchApprovalRequests } from '../lib/api'
 import type { ApprovalRequest } from '../lib/types'
 
 export function useApprovalRequests() {
@@ -7,8 +7,8 @@ export function useApprovalRequests() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
 
-  const refetch = useCallback(async () => {
-    setLoading(true)
+  const refetch = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true)
     const { requests: data, error: err } = await fetchApprovalRequests()
     setError(err)
     setRequests(data)
@@ -24,5 +24,3 @@ export function useApprovalRequests() {
 
   return { requests, pending, loading, error, refetch }
 }
-
-export { createApprovalRequest }

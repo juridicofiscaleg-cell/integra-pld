@@ -331,6 +331,7 @@ function OperationModal({
   userId?: string
   refetchNotices?: () => void
 }) {
+  const { runProtectedAction } = useProtectedAction()
   const [clientId, setClientId] = useState('')
   const [expedienteId, setExpedienteId] = useState('')
   const [operationDate, setOperationDate] = useState(new Date().toISOString().slice(0, 10))
@@ -360,7 +361,7 @@ function OperationModal({
     setSaving(true)
     const amt = amount ? Number(amount) : undefined
     const shouldUnusual = unusual || !!classification.noticeType
-    const result = await createPldOperation({
+    const operationData = {
       client_id: clientId,
       expediente_id: expedienteId || undefined,
       operation_date: operationDate,
@@ -371,11 +372,27 @@ function OperationModal({
       auto_create_notice: shouldUnusual && autoNotice,
       notice_type: classification.noticeType ?? 'inusual',
       client_industry: selectedClient?.industry,
-    }, userId)
+    }
+    let noticeCreated = false
+    const result = await runProtectedAction({
+      actionType: 'create_operation',
+      title: `Registrar operación — ${selectedClient?.name ?? 'Cliente'}`,
+      clientId,
+      payload: { operationData },
+      direct: async () => {
+        const r = await createPldOperation(operationData, userId)
+        if (r.error) return { error: r.error }
+        noticeCreated = !!r.noticeId
+        return {}
+      },
+    })
     setSaving(false)
     if (result.error) setError(result.error)
-    else {
-      if (result.noticeId) refetchNotices?.()
+    else if (result.pending) {
+      alert('Operación enviada a Autorizaciones.')
+      onClose()
+    } else {
+      if (noticeCreated) refetchNotices?.()
       onCreated()
     }
   }

@@ -7,6 +7,7 @@ import { Button } from '../ui/Button'
 import { AssignSelect } from '../ui/AssignSelect'
 import { createExpediente } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { Client, MatterType, Priority, Profile } from '../../lib/types'
 import { MATTER_TYPE_LABELS } from '../../lib/types'
 
@@ -20,6 +21,7 @@ interface NewExpedienteModalProps {
 
 export function NewExpedienteModal({ open, onClose, clients, profiles, onCreated }: NewExpedienteModalProps) {
   const { user } = useAuth()
+  const { runProtectedAction } = useProtectedAction()
   const navigate = useNavigate()
   const [clientId, setClientId] = useState('')
   const [title, setTitle] = useState('')
@@ -59,17 +61,28 @@ export function NewExpedienteModal({ open, onClose, clients, profiles, onCreated
     setSubmitting(true)
     setError('')
 
-    const result = await createExpediente(
-      {
-        client_id: clientId,
-        title,
-        matter_type: matterType,
-        description,
-        priority,
-        assigned_to: assignedTo || undefined,
+    const expedienteData = {
+      client_id: clientId,
+      title,
+      matter_type: matterType,
+      description,
+      priority,
+      assigned_to: assignedTo || undefined,
+    }
+
+    let createdId: string | undefined
+    const result = await runProtectedAction({
+      actionType: 'create_expediente',
+      title: `Crear expediente: ${title.trim()}`,
+      clientId,
+      payload: { expedienteData },
+      direct: async () => {
+        const r = await createExpediente(expedienteData, user?.id)
+        if (r.error) return { error: r.error }
+        createdId = r.expedienteId
+        return {}
       },
-      user?.id,
-    )
+    })
 
     setSubmitting(false)
 
@@ -77,8 +90,14 @@ export function NewExpedienteModal({ open, onClose, clients, profiles, onCreated
       setError(result.error)
       return
     }
+    if (result.pending) {
+      alert('Solicitud enviada. El abogado la revisará en Autorizaciones.')
+      reset()
+      onClose()
+      return
+    }
 
-    const newId = result.expedienteId
+    const newId = createdId
     reset()
     onCreated()
     onClose()

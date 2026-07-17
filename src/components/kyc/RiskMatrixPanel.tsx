@@ -5,7 +5,8 @@ import { Select } from '../ui/Select'
 import { Badge } from '../ui/Badge'
 import { saveClientRiskMatrix } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
-import { canWrite } from '../../lib/permissions'
+import { canWrite, needsApprovalForSensitive } from '../../lib/permissions'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { Client } from '../../lib/types'
 import { RISK_LABELS } from '../../lib/types'
 import {
@@ -23,7 +24,8 @@ interface RiskMatrixPanelProps {
 
 export function RiskMatrixPanel({ client, onUpdated }: RiskMatrixPanelProps) {
   const { user, profile } = useAuth()
-  const canEdit = canWrite(profile?.role)
+  const { runProtectedAction } = useProtectedAction()
+  const canEdit = canWrite(profile?.role) || needsApprovalForSensitive(profile?.role)
   const stored = (client.risk_matrix ?? {}) as unknown as RiskMatrixFactors
   const [factors, setFactors] = useState<RiskMatrixFactors>(
     Object.keys(stored).length ? stored : defaultRiskMatrix(client.client_type, client.vulnerable_activity ?? false),
@@ -43,10 +45,21 @@ export function RiskMatrixPanel({ client, onUpdated }: RiskMatrixPanelProps) {
   async function handleSave() {
     setSaving(true)
     setError('')
-    const result = await saveClientRiskMatrix(client.id, { ...factors, notes: factors.notes }, user?.id)
+    const factorsPayload = { ...factors, notes: factors.notes }
+    const result = await runProtectedAction({
+      actionType: 'update_risk_matrix',
+      title: `Matriz de riesgo: ${client.name}`,
+      clientId: client.id,
+      payload: { clientId: client.id, factors: factorsPayload },
+      direct: () => saveClientRiskMatrix(client.id, factorsPayload, user?.id),
+    })
     setSaving(false)
     if (result.error) setError(result.error)
-    else {
+    else if (result.pending) {
+      setSaved(false)
+      setError('')
+      alert('Matriz enviada a Autorizaciones.')
+    } else {
       setSaved(true)
       onUpdated()
     }
@@ -103,7 +116,7 @@ export function RiskMatrixPanel({ client, onUpdated }: RiskMatrixPanelProps) {
           {saving ? 'Guardando...' : 'Guardar matriz de riesgo'}
         </Button>
       ) : (
-        <p className="card-desc">Solo abogados y administradores pueden editar la matriz.</p>
+        <p className="card-desc">Solo abogados pueden editar directamente; auxiliar envía cambios a Autorizaciones.</p>
       )}
     </div>
   )

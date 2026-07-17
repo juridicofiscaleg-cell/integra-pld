@@ -94,3 +94,16 @@ export function canManageTeam(role?: UserRole): boolean {
 export function needsApprovalForSensitive(role?: UserRole): boolean {
   return role === 'asistente'
 }
+
+export function isAccountActive(profile?: { account_status?: string } | null): boolean {
+  if (!profile) return false
+  return !profile.account_status || profile.account_status === 'activo'
+}
+
+export function isAccountPending(profile?: { account_status?: string } | null): boolean {
+  return profile?.account_status === 'pendiente'
+}
+
+export function isAccountRejected(profile?: { account_status?: string } | null): boolean {
+  return profile?.account_status === 'rechazado'
+}

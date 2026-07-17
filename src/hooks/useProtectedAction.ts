@@ -1,11 +1,6 @@
 import { useAuth } from '../context/AuthContext'
 import { createApprovalRequest } from '../lib/api'
-import {
-  canApproveKyc,
-  canDelete,
-  canExportBundle,
-  needsApprovalForSensitive,
-} from '../lib/permissions'
+import { needsApprovalForSensitive } from '../lib/permissions'
 import type { ApprovalActionType } from '../lib/types'
 
 type DirectResult = { error?: string }
@@ -14,14 +9,12 @@ export function useProtectedAction() {
   const { user, profile } = useAuth()
   const role = profile?.role
 
-  function requiresApproval(actionType: ApprovalActionType): boolean {
-    if (!needsApprovalForSensitive(role)) return false
-    if (actionType === 'approve_kyc') return !canApproveKyc(role)
-    if (actionType === 'export_client_bundle') return !canExportBundle(role)
-    return !canDelete(role)
+  /** Asistente: toda acción registrada requiere autorización del abogado */
+  function requiresApproval(_actionType: ApprovalActionType): boolean {
+    return needsApprovalForSensitive(role)
   }
 
-  async function runSensitiveAction(params: {
+  async function runProtectedAction(params: {
     actionType: ApprovalActionType
     title: string
     description?: string
@@ -50,5 +43,5 @@ export function useProtectedAction() {
     return { ok: true, pending: true }
   }
 
-  return { runSensitiveAction, requiresApproval, role }
+  return { runProtectedAction, runSensitiveAction: runProtectedAction, requiresApproval, role }
 }

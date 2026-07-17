@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { AssignSelect } from '../ui/AssignSelect'
 import { createAlert, notifyAssigneeEmail } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { AlertType, Client, Expediente, Profile } from '../../lib/types'
 
 interface NewAlertModalProps {
@@ -38,6 +39,7 @@ export function NewAlertModal({
   defaultExpedienteId,
 }: NewAlertModalProps) {
   const { user } = useAuth()
+  const { runProtectedAction } = useProtectedAction()
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
   const [alertType, setAlertType] = useState<AlertType>('general')
@@ -63,21 +65,34 @@ export function NewAlertModal({
     e.preventDefault()
     setSaving(true)
     setError('')
-    const result = await createAlert(
-      {
-        title,
-        message,
-        alert_type: alertType,
-        due_date: dueDate || undefined,
-        client_id: clientId || undefined,
-        expediente_id: expedienteId || undefined,
-        assigned_to: assignedTo || undefined,
+    const alertData = {
+      title,
+      message,
+      alert_type: alertType,
+      due_date: dueDate || undefined,
+      client_id: clientId || undefined,
+      expediente_id: expedienteId || undefined,
+      assigned_to: assignedTo || undefined,
+    }
+    const result = await runProtectedAction({
+      actionType: 'create_alert',
+      title: `Nueva alerta: ${title.trim()}`,
+      clientId: clientId || undefined,
+      payload: { alertData },
+      direct: async () => {
+        const r = await createAlert(alertData, user?.id)
+        return r.error ? { error: r.error } : {}
       },
-      user?.id,
-    )
+    })
     setSaving(false)
     if (result.error) {
       setError(result.error)
+      return
+    }
+    if (result.pending) {
+      alert('Alerta enviada a Autorizaciones.')
+      reset()
+      onClose()
       return
     }
     if (notifyEmail && assignedTo) {

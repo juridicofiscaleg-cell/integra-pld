@@ -22,6 +22,7 @@ import { calcMatrixRiskLevel, type RiskMatrixFactors } from './risk-matrix'
 import { KYC_CHECKLIST_ITEMS } from './types'
 import { getWorkflowStages } from './workflows'
 import { formatSupabaseMigrationError } from './supabase-errors'
+import { executeApprovalAction } from './approval-executor'
 import { format, parseISO, differenceInDays } from 'date-fns'
 
 function calcChecklistCompletion(checklist: KycChecklist): number {
@@ -462,10 +463,258 @@ export async function getDocumentUrl(storagePath: string): Promise<string | null
 export async function deleteDocument(docId: string, storagePath: string): Promise<{ error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
 
-  await supabase.storage.from('documentos').remove([storagePath])
-  const { error } = await supabase.from('documents').delete().eq('id', docId)
+  if (storagePath && storagePath !== 'undefined') {
+    const { error: storageError } = await supabase.storage.from('documentos').remove([storagePath])
+    if (storageError) console.warn('Storage remove:', storageError.message)
+  }
+
+  const { data, error } = await supabase.from('documents').delete().eq('id', docId).select('id').maybeSingle()
+  if (error) return { error: error.message }
+  if (!data) return { error: 'No se pudo eliminar el documento (permisos o registro inexistente).' }
+  return {}
+}
+
+export async function uploadToPendingStorage(
+  file: File,
+  userId: string,
+  bucket: 'documentos' | 'cumplimiento' | 'plantillas' = 'documentos',
+): Promise<{ pendingPath?: string; error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const pendingPath = `pendientes/${userId}/${Date.now()}_${safeName}`
+  const { error } = await supabase.storage.from(bucket).upload(pendingPath, file, { upsert: false })
+  if (error) return { error: error.message }
+  return { pendingPath }
+}
+
+export async function finalizePendingDocument(
+  payload: Record<string, unknown>,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const pendingPath = String(payload.pendingStoragePath ?? '')
+  const fileName = String(payload.fileName ?? 'documento')
+  const fileSize = Number(payload.fileSize ?? 0)
+  const meta = payload.meta as {
+    expediente_id?: string
+    client_id?: string
+    kyc_id?: string
+    doc_type: string
+    legal_resource_id?: string
+  }
+
+  const folder = meta.expediente_id ?? meta.client_id ?? meta.kyc_id ?? 'general'
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `${folder}/${Date.now()}_${safeName}`
+
+  const { data: blob, error: dlErr } = await supabase.storage.from('documentos').download(pendingPath)
+  if (dlErr || !blob) return { error: dlErr?.message ?? 'Archivo pendiente no encontrado' }
+
+  const { error: upErr } = await supabase.storage.from('documentos').upload(storagePath, blob, { upsert: false })
+  if (upErr) return { error: upErr.message }
+
+  const { error: dbError } = await supabase.from('documents').insert({
+    name: fileName,
+    doc_type: meta.doc_type,
+    storage_path: storagePath,
+    file_size: fileSize || blob.size,
+    expediente_id: meta.expediente_id ?? null,
+    client_id: meta.client_id ?? null,
+    kyc_id: meta.kyc_id ?? null,
+    legal_resource_id: meta.legal_resource_id ?? null,
+    uploaded_by: userId ?? null,
+  })
+
+  await supabase.storage.from('documentos').remove([pendingPath])
+  if (dbError) return { error: dbError.message }
+  return {}
+}
+
+export async function replaceDocumentFromPending(
+  payload: Record<string, unknown>,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const docId = String(payload.docId)
+  const oldStoragePath = String(payload.oldStoragePath ?? '')
+  const pendingPath = String(payload.pendingStoragePath ?? '')
+  const fileName = String(payload.fileName ?? 'documento')
+  const fileSize = Number(payload.fileSize ?? 0)
+
+  const { data: blob, error: dlErr } = await supabase.storage.from('documentos').download(pendingPath)
+  if (dlErr || !blob) return { error: dlErr?.message ?? 'Archivo pendiente no encontrado' }
+
+  const { data: existing } = await supabase.from('documents').select('*').eq('id', docId).single()
+  if (!existing) return { error: 'Documento no encontrado' }
+
+  if (oldStoragePath) {
+    await supabase.storage.from('documentos').remove([oldStoragePath])
+  }
+
+  const folder = existing.expediente_id ?? existing.client_id ?? existing.kyc_id ?? 'general'
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `${folder}/${Date.now()}_${safeName}`
+
+  const { error: upErr } = await supabase.storage.from('documentos').upload(storagePath, blob, { upsert: false })
+  if (upErr) return { error: upErr.message }
+
+  const { error } = await supabase
+    .from('documents')
+    .update({
+      name: fileName,
+      storage_path: storagePath,
+      file_size: fileSize || blob.size,
+      uploaded_by: userId ?? null,
+      uploaded_at: new Date().toISOString(),
+    })
+    .eq('id', docId)
+
+  await supabase.storage.from('documentos').remove([pendingPath])
   if (error) return { error: error.message }
   return {}
+}
+
+export async function finalizePendingComplianceManual(
+  payload: Record<string, unknown>,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const pendingPath = String(payload.pendingStoragePath ?? '')
+  const fileName = String(payload.fileName ?? 'manual.pdf')
+  const meta = payload.meta as {
+    client_id: string
+    title: string
+    version: string
+    description?: string
+    effective_date: string
+  }
+
+  const { data: blob, error: dlErr } = await supabase.storage.from('cumplimiento').download(pendingPath)
+  if (dlErr || !blob) return { error: dlErr?.message ?? 'Archivo no encontrado' }
+
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `manuales/${meta.client_id}/${Date.now()}_${safeName}`
+  const { error: upErr } = await supabase.storage.from('cumplimiento').upload(storagePath, blob, { upsert: false })
+  if (upErr) return { error: upErr.message }
+
+  await supabase
+    .from('compliance_manuals')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('client_id', meta.client_id)
+    .eq('is_active', true)
+
+  const { error } = await supabase.from('compliance_manuals').insert({
+    client_id: meta.client_id,
+    title: meta.title.trim(),
+    version: meta.version.trim(),
+    description: meta.description?.trim() || null,
+    storage_path: storagePath,
+    file_name: fileName,
+    effective_date: meta.effective_date,
+    is_active: true,
+    uploaded_by: userId ?? null,
+  })
+
+  await supabase.storage.from('cumplimiento').remove([pendingPath])
+  if (error) return { error: formatSupabaseMigrationError(error.message) }
+  return {}
+}
+
+export async function finalizePendingLegalResource(
+  payload: Record<string, unknown>,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const pendingPath = String(payload.pendingStoragePath ?? '')
+  const fileName = String(payload.fileName ?? 'recurso')
+  const meta = payload.meta as {
+    title: string
+    category: string
+    description?: string
+    is_template?: boolean
+  }
+
+  const bucket = 'plantillas'
+  const { data: blob, error: dlErr } = await supabase.storage.from(bucket).download(pendingPath)
+  if (dlErr || !blob) return { error: dlErr?.message ?? 'Archivo no encontrado' }
+
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `${meta.category}/${Date.now()}_${safeName}`
+  const { error: upErr } = await supabase.storage.from(bucket).upload(storagePath, blob, { upsert: false })
+  if (upErr) return { error: upErr.message }
+
+  const { error } = await supabase.from('legal_resources').insert({
+    title: meta.title.trim(),
+    category: meta.category,
+    description: meta.description?.trim() || null,
+    storage_path: storagePath,
+    file_name: fileName,
+    is_template: meta.is_template ?? false,
+    uploaded_by: userId ?? null,
+  })
+
+  await supabase.storage.from('plantillas').remove([pendingPath])
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function approveAccountAccess(
+  profileId: string,
+  role?: import('./types').UserRole,
+  reviewerId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      account_status: 'activo',
+      role: role ?? 'asistente',
+    })
+    .eq('id', profileId)
+    .select('id')
+    .maybeSingle()
+  if (error) return { error: error.message }
+  if (!data) return { error: 'No se pudo activar la cuenta' }
+  await supabase.from('activity_log').insert({
+    user_id: reviewerId ?? null,
+    action: 'cuenta_aprobada',
+    description: `Autorizó acceso de nuevo usuario (${profileId})`,
+  })
+  return {}
+}
+
+export async function rejectAccountAccess(profileId: string, reviewerId?: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('profiles').update({ account_status: 'rechazado' }).eq('id', profileId)
+  if (error) return { error: error.message }
+  await supabase.from('activity_log').insert({
+    user_id: reviewerId ?? null,
+    action: 'cuenta_rechazada',
+    description: `Rechazó acceso de nuevo usuario (${profileId})`,
+  })
+  return {}
+}
+
+export async function ensureAccountApprovalRequest(profile: import('./types').Profile): Promise<void> {
+  if (!supabase || profile.account_status !== 'pendiente') return
+  const { data: existing } = await supabase
+    .from('approval_requests')
+    .select('id, payload')
+    .eq('action_type', 'approve_account')
+    .eq('status', 'pendiente')
+  const already = (existing ?? []).some(
+    (r) => (r.payload as Record<string, unknown>)?.profileId === profile.id,
+  )
+  if (already) return
+  await createApprovalRequest(
+    {
+      action_type: 'approve_account',
+      title: `Nueva cuenta: ${profile.full_name}`,
+      description: profile.email,
+      payload: { profileId: profile.id, email: profile.email, fullName: profile.full_name },
+    },
+    profile.id,
+  )
 }
 
 export async function resolveAlert(alertId: string): Promise<{ error?: string }> {
@@ -1729,9 +1978,12 @@ export async function reviewApprovalRequest(
     if (idx < 0) return { error: 'Solicitud no encontrada' }
     const req = list[idx]
     if (req.status !== 'pendiente') return { error: 'La solicitud ya fue revisada' }
+    if (decision === 'rechazada' && req.action_type === 'approve_account') {
+      const reject = await rejectAccountAccess(String(req.payload.profileId), reviewerId)
+      if (reject.error) return reject
+    }
     if (decision === 'aprobada') {
-      const { executeApprovalAction } = await import('./approval-executor')
-      const exec = await executeApprovalAction(req.action_type, req.payload, reviewerId)
+      const exec = await executeApprovalAction(req.action_type, req.payload, reviewerId, req.requested_by)
       if (exec.error) return exec
     }
     list[idx] = {
@@ -1754,17 +2006,22 @@ export async function reviewApprovalRequest(
   if (fetchErr || !req) return { error: fetchErr?.message ?? 'Solicitud no encontrada' }
   if (req.status !== 'pendiente') return { error: 'La solicitud ya fue revisada' }
 
+  if (decision === 'rechazada' && req.action_type === 'approve_account') {
+    const reject = await rejectAccountAccess(String((req.payload as Record<string, unknown>).profileId), reviewerId)
+    if (reject.error) return reject
+  }
+
   if (decision === 'aprobada') {
-    const { executeApprovalAction } = await import('./approval-executor')
     const exec = await executeApprovalAction(
       req.action_type as import('./types').ApprovalActionType,
       req.payload as Record<string, unknown>,
       reviewerId,
+      req.requested_by ?? undefined,
     )
     if (exec.error) return exec
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('approval_requests')
     .update({
       status: decision,
@@ -1773,8 +2030,12 @@ export async function reviewApprovalRequest(
       reviewed_at: now,
     })
     .eq('id', id)
+    .eq('status', 'pendiente')
+    .select('id')
+    .maybeSingle()
 
   if (error) return { error: error.message }
+  if (!updated) return { error: 'No se pudo actualizar la solicitud. Verifica permisos en Supabase.' }
 
   await supabase.from('activity_log').insert({
     client_id: req.client_id,
