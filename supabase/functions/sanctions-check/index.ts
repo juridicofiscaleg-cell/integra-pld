@@ -21,10 +21,10 @@ interface MatchQuery {
 }
 
 const RISK_TOPICS = /sanction|crime|debarment|wanted|pep|role\.pep|poi|corp\.disqual|freeze/i
+const PEP_TOPICS = /pep|role\.pep/i
 const CJK_RE = /[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/
 const LATIN_RE = /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/
 
-/** OpenSanctions devuelve alias en varios idiomas; preferimos latín/español para México. */
 function asStringArray(val: unknown): string[] {
   if (Array.isArray(val)) return val.filter((v): v is string => typeof v === 'string')
   if (typeof val === 'string' && val.trim()) return [val]
@@ -62,13 +62,48 @@ function pickDisplayName(props: Record<string, unknown>, queryName: string): str
   return finalPool[0]
 }
 
-async function matchCollection(
-  collection: string,
+function parseOpenSanctionsError(status: number, text: string): Error {
+  if (status === 429) {
+    return new Error(
+      'Cuota mensual de OpenSanctions agotada. Espera al próximo mes, solicita más límite en opensanctions.org/docs/api/, o configura otra API key en Supabase Secrets.',
+    )
+  }
+  if (status === 401 || status === 403) {
+    return new Error('API key de OpenSanctions inválida. Revisa OPENSANCTIONS_API_KEY en Supabase Secrets.')
+  }
+  return new Error(`OpenSanctions respondió ${status}: ${text.slice(0, 180)}`)
+}
+
+/** Una sola consulta por verificación para no agotar la cuota mensual. */
+function buildPrimaryQuery(name: string, clientType: string, rfc?: string): MatchQuery {
+  const trimmed = name.trim()
+  const schema = clientType === 'persona_fisica' ? 'Person' : 'Company'
+  const rfcVal = rfc?.trim().toUpperCase()
+
+  if (clientType === 'persona_fisica') {
+    const parts = trimmed.split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      const properties: Record<string, string[]> = {
+        firstName: [parts[0]],
+        lastName: [parts.slice(1).join(' ')],
+      }
+      if (rfcVal) properties.registrationNumber = [rfcVal]
+      return { schema: 'Person', properties }
+    }
+  }
+
+  const properties: Record<string, string[]> = { name: [trimmed] }
+  if (rfcVal) properties.registrationNumber = [rfcVal]
+  if (clientType === 'persona_moral') properties.country = ['mx']
+  return { schema, properties }
+}
+
+async function matchDefault(
   query: MatchQuery,
   queryName: string,
   apiKey: string,
 ): Promise<MatchRow[]> {
-  const res = await fetch(`${API_BASE}/match/${collection}?limit=15`, {
+  const res = await fetch(`${API_BASE}/match/default?limit=20`, {
     method: 'POST',
     headers: {
       Authorization: `ApiKey ${apiKey}`,
@@ -79,7 +114,7 @@ async function matchCollection(
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`OpenSanctions ${collection}: ${res.status} ${text.slice(0, 200)}`)
+    throw parseOpenSanctionsError(res.status, text)
   }
 
   const data = await res.json()
@@ -87,10 +122,7 @@ async function matchCollection(
 
   return results.map((r: Record<string, unknown>) => {
     const props = (r.properties ?? {}) as Record<string, unknown>
-    const topics = [
-      ...asStringArray(props.topics),
-      ...asStringArray(r.topics),
-    ]
+    const topics = [...asStringArray(props.topics), ...asStringArray(r.topics)]
     return {
       score: (r.score as number) ?? 0,
       name: pickDisplayName(props, queryName),
@@ -98,68 +130,22 @@ async function matchCollection(
       topics: [...new Set(topics)],
       datasets: Array.isArray(r.datasets) ? (r.datasets as string[]) : [],
     }
-  })
-}
-
-function buildQueries(name: string, clientType: string, rfc?: string): MatchQuery[] {
-  const trimmed = name.trim()
-  const schema = clientType === 'persona_fisica' ? 'Person' : 'Company'
-  const queries: MatchQuery[] = [
-    { schema, properties: { name: [trimmed] } },
-  ]
-
-  if (clientType === 'persona_fisica') {
-    const parts = trimmed.split(/\s+/).filter(Boolean)
-    if (parts.length >= 2) {
-      queries.push({
-        schema: 'Person',
-        properties: {
-          firstName: [parts[0]],
-          lastName: [parts.slice(1).join(' ')],
-        },
-      })
-      queries.push({ schema: 'Person', properties: { lastName: [parts[parts.length - 1]] } })
-    }
-  }
-
-  if (rfc) {
-    queries.push({
-      schema,
-      properties: {
-        name: [trimmed],
-        registrationNumber: [rfc.trim().toUpperCase()],
-      },
-    })
-  }
-
-  if (clientType === 'persona_moral') {
-    queries[0].properties.country = ['mx']
-  }
-
-  return queries
-}
-
-async function searchAll(
-  collection: string,
-  queries: MatchQuery[],
-  queryName: string,
-  apiKey: string,
-): Promise<MatchRow[]> {
-  const batches = await Promise.all(
-    queries.map((q) => matchCollection(collection, q, queryName, apiKey)),
-  )
-  const merged = batches.flat()
-  const byEntity = new Map<string, MatchRow>()
-  for (const row of merged) {
-    const key = row.entityId ?? row.name.toLowerCase()
-    const prev = byEntity.get(key)
-    if (!prev || row.score > prev.score) byEntity.set(key, row)
-  }
-  return [...byEntity.values()].sort((a, b) => b.score - a.score)
+  }).sort((a, b) => b.score - a.score)
 }
 
 function isRiskMatch(row: MatchRow): boolean {
   return row.score >= 0.42 || row.topics.some((t) => RISK_TOPICS.test(t))
+}
+
+function isPepMatch(row: MatchRow): boolean {
+  return row.topics.some((t) => PEP_TOPICS.test(t))
+}
+
+function isSatMatch(row: MatchRow): boolean {
+  return (
+    row.datasets.some((d) => /mx|sat|69|mexico/i.test(d)) ||
+    row.topics.some((t) => RISK_TOPICS.test(t))
+  )
 }
 
 function resultFromMatches(
@@ -226,44 +212,42 @@ serve(async (req) => {
       })
     }
 
-    const queries = buildQueries(name, clientType ?? 'persona_fisica', rfc)
     const queryName = name.trim()
+    const query = buildPrimaryQuery(name, clientType ?? 'persona_fisica', rfc)
 
-    const [defaultAll, sanctions, peps] = await Promise.all([
-      searchAll('default', queries, queryName, apiKey),
-      searchAll('sanctions', queries, queryName, apiKey),
-      searchAll('peps', queries, queryName, apiKey),
-    ])
+    // Una sola llamada HTTP a OpenSanctions (antes eran hasta 12 por clic).
+    const allMatches = await matchDefault(query, queryName, apiKey)
 
-    const allSanctions = [...defaultAll, ...sanctions]
-      .sort((a, b) => b.score - a.score)
-      .filter((v, i, arr) => arr.findIndex((x) => x.name === v.name) === i)
-
-    const satMatches = allSanctions.filter(
-      (m) =>
-        m.datasets.some((d) => /mx|sat|69|mexico/i.test(d)) ||
-        m.topics.some((t) => RISK_TOPICS.test(t)),
+    const peps = allMatches.filter(isPepMatch)
+    const satMatches = allMatches.filter(isSatMatch)
+    const sanctions = allMatches.filter(
+      (m) => m.topics.some((t) => RISK_TOPICS.test(t)) || m.score >= 0.35,
     )
 
     const results = [
-      resultFromMatches('ofac', 'Sanciones internacionales (OFAC/ONU/SDN)', allSanctions),
+      resultFromMatches(
+        'ofac',
+        'Sanciones internacionales (OFAC/ONU/SDN)',
+        sanctions.length ? sanctions : allMatches,
+      ),
       resultFromMatches(
         'sat_69b',
         'SAT / Listas México y delitos',
-        satMatches.length ? satMatches : allSanctions,
+        satMatches.length ? satMatches : allMatches,
       ),
-      resultFromMatches('un', 'PEP — Personas políticamente expuestas', peps, 0.38),
+      resultFromMatches('un', 'PEP — Personas políticamente expuestas', peps.length ? peps : allMatches, 0.38),
     ]
 
     return new Response(
-      JSON.stringify({ results, queried_name: name.trim(), engine: 'opensanctions-live' }),
+      JSON.stringify({ results, queried_name: queryName, engine: 'opensanctions-live' }),
       { headers: { ...cors, 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error desconocido'
     console.error('sanctions-check error:', message)
+    const status = /cuota mensual|rate limit/i.test(message) ? 429 : 500
     return new Response(JSON.stringify({ error: message }), {
-      status: 500,
+      status,
       headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }

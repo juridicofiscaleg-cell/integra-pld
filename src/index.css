@@ -921,6 +921,122 @@ a:hover { text-decoration: underline; }
 
 code { background: var(--bg); padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.85rem; }
 
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  align-items: flex-end;
+}
+.filter-bar .form-field { flex: 1; min-width: 160px; margin: 0; }
+
+.form-stack { display: flex; flex-direction: column; gap: 1rem; }
+.form-actions, .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; flex-wrap: wrap; margin-top: 1rem; }
+.form-success { color: var(--success); font-size: 0.9rem; }
+.btn-link { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--accent); font-size: 0.9rem; margin-top: 0.75rem; }
+
+.my-day-section { margin-bottom: 1.5rem; }
+.my-day-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+.my-day-grid h3 { font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-muted); }
+
+.compliance-badge {
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--border);
+}
+.compliance-verde { border-left: 4px solid var(--success); background: var(--success-bg); }
+.compliance-amarillo { border-left: 4px solid var(--warning); background: var(--warning-bg); }
+.compliance-rojo { border-left: 4px solid var(--danger); background: var(--danger-bg); }
+.compliance-issues { margin: 0.5rem 0 0 1.25rem; font-size: 0.85rem; color: var(--text-muted); }
+
+.risk-matrix-panel { display: flex; flex-direction: column; gap: 1rem; }
+.risk-matrix-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.risk-matrix-score { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+.risk-factors-grid { display: flex; flex-direction: column; gap: 0.75rem; }
+.risk-factor-row {
+  display: grid;
+  grid-template-columns: 1fr 140px;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.risk-factor-row small { display: block; color: var(--text-muted); font-size: 0.75rem; }
+
+.bc-editor, .pep-questionnaire { display: flex; flex-direction: column; gap: 0.75rem; }
+.bc-header { display: flex; justify-content: space-between; align-items: center; }
+.bc-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  align-items: end;
+}
+
+.client-timeline { display: flex; flex-direction: column; gap: 0.75rem; }
+.client-timeline-item { display: flex; gap: 0.75rem; align-items: flex-start; }
+.timeline-detail { display: block; font-size: 0.85rem; color: var(--text-muted); }
+.timeline-notes-edit textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.timeline-action-muted { color: var(--text-muted) !important; font-size: 0.8rem !important; }
+
+.calendar-month { min-width: 160px; text-align: center; text-transform: capitalize; }
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 1.5rem;
+}
+.calendar-weekday {
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0.5rem;
+}
+.calendar-day {
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 0.9rem;
+}
+.calendar-day.other-month { opacity: 0.4; }
+.calendar-day.selected { border-color: var(--accent); background: var(--accent-light); }
+.calendar-day.has-urgent { border-color: var(--danger); }
+.calendar-dot {
+  font-size: 0.65rem;
+  background: var(--accent);
+  color: white;
+  border-radius: 999px;
+  padding: 0 5px;
+  min-width: 16px;
+}
+
+.expediente-assignee { font-size: 0.85rem; color: var(--text-muted); margin: 0.25rem 0; }
+.card-wide { grid-column: span 2; }
+@media (max-width: 900px) { .card-wide { grid-column: span 1; } }
+
 @media (max-width: 900px) {
   .app-shell { flex-direction: column; }
   .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 1rem; }

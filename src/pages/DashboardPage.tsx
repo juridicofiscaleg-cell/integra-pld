@@ -1,25 +1,36 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle, FileCheck, FolderOpen, Users } from 'lucide-react'
+import { AlertTriangle, Calendar, FileCheck, FolderOpen, Users } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
-import { useActivity, useAlerts, useClients, useExpedientes, useKycRecords } from '../hooks/useData'
+import { useAuth } from '../context/AuthContext'
+import { useActivity, useAlerts, useClients, useExpedientes, useKycRecords, useProfiles } from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { getProgressPercent, getWorkflowStages } from '../lib/workflows'
 import { formatDate, formatRelative } from '../lib/utils'
+import { differenceInDays, parseISO } from 'date-fns'
 
 export function DashboardPage() {
+  const { user } = useAuth()
   const { clients } = useClients()
   const { expedientes } = useExpedientes()
   const { records: kycRecords } = useKycRecords()
   const { alerts } = useAlerts()
   const { activity } = useActivity()
+  const { profiles } = useProfiles()
+
+  const profileName = profiles.find((p) => p.id === user?.id)
 
   const activeExpedientes = expedientes.filter((e) => e.status === 'activo')
+  const myExpedientes = activeExpedientes.filter((e) => e.assigned_to === user?.id)
+  const myAlerts = alerts.filter((a) => a.assigned_to === user?.id || (!a.assigned_to && a.created_by === user?.id))
   const pendingKyc = kycRecords.filter((k) => k.status === 'pendiente' || k.status === 'en_revision')
   const expiringKyc = kycRecords.filter((k) => {
     if (!k.expires_at || k.status === 'vencido') return k.status === 'vencido'
     const days = Math.ceil((new Date(k.expires_at).getTime() - Date.now()) / 86400000)
     return days <= 30
   })
+  const staleExpedientes = activeExpedientes.filter(
+    (e) => differenceInDays(new Date(), parseISO(e.updated_at)) > 7,
+  )
   const vulnerableClients = clients.filter((c) => c.vulnerable_activity)
 
   const stats = [
@@ -34,8 +45,11 @@ export function DashboardPage() {
       <header className="page-header">
         <div>
           <h1>Dashboard</h1>
-          <p>Vista general de tu despacho</p>
+          <p>Vista general de tu despacho — {profileName?.full_name ?? 'Equipo'}</p>
         </div>
+        <Link to="/calendario" className="btn-link">
+          <Calendar size={16} /> Calendario
+        </Link>
       </header>
 
       <div className="stats-grid">
@@ -49,6 +63,66 @@ export function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      <section className="card card-wide my-day-section">
+        <h2>Mi día</h2>
+        <div className="my-day-grid">
+          <div>
+            <h3>Mis expedientes ({myExpedientes.length})</h3>
+            {myExpedientes.length === 0 ? (
+              <p className="empty-state">Sin expedientes asignados</p>
+            ) : (
+              myExpedientes.slice(0, 5).map((exp) => (
+                <Link key={exp.id} to={`/expedientes/${exp.id}`} className="mini-list-item">
+                  <strong>{exp.title}</strong>
+                  <Badge variant="info">{MATTER_TYPE_LABELS[exp.matter_type]}</Badge>
+                </Link>
+              ))
+            )}
+          </div>
+          <div>
+            <h3>Mis alertas ({myAlerts.length})</h3>
+            {myAlerts.length === 0 ? (
+              <p className="empty-state">Sin alertas asignadas</p>
+            ) : (
+              myAlerts.slice(0, 5).map((a) => (
+                <div key={a.id} className="mini-list-item">
+                  <strong>{a.title}</strong>
+                  {a.due_date && <span>Vence {formatDate(a.due_date)}</span>}
+                </div>
+              ))
+            )}
+          </div>
+          <div>
+            <h3>KYC esta semana</h3>
+            {expiringKyc.length === 0 ? (
+              <p className="empty-state">Nada urgente</p>
+            ) : (
+              expiringKyc.slice(0, 5).map((k) => (
+                <Link key={k.id} to={`/clientes/${k.client_id}`} className="mini-list-item">
+                  <strong>{k.clients?.name}</strong>
+                  <Badge variant={k.status === 'vencido' ? 'danger' : 'warning'}>
+                    {k.status === 'vencido' ? 'Vencido' : formatDate(k.expires_at)}
+                  </Badge>
+                </Link>
+              ))
+            )}
+          </div>
+          <div>
+            <h3>Estancados +7 días ({staleExpedientes.length})</h3>
+            {staleExpedientes.length === 0 ? (
+              <p className="empty-state">Todo con movimiento reciente</p>
+            ) : (
+              staleExpedientes.slice(0, 5).map((e) => (
+                <Link key={e.id} to={`/expedientes/${e.id}`} className="mini-list-item">
+                  <strong>{e.title}</strong>
+                  <span>Último mov. {formatRelative(e.updated_at)}</span>
+                </Link>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
 
       <div className="dashboard-grid">
         <section className="card">
@@ -111,13 +185,14 @@ export function DashboardPage() {
               </div>
             ))}
           </div>
+          <Link to="/bitacora" className="btn-link">Ver bitácora completa →</Link>
         </section>
 
         <section className="card">
           <h2>Clientes por riesgo</h2>
           <div className="risk-summary">
             {(['bajo', 'medio', 'alto', 'critico'] as const).map((level) => {
-              const count = clients.filter((c) => c.risk_level === level).length
+              const count = clients.filter((c) => (c.matrix_risk_level ?? c.risk_level) === level).length
               const variant = level === 'bajo' ? 'success' : level === 'medio' ? 'warning' : 'danger'
               return (
                 <div key={level} className="risk-item">
@@ -131,24 +206,6 @@ export function DashboardPage() {
             <p className="dashboard-note">
               {vulnerableClients.length} cliente(s) con actividad vulnerable
             </p>
-          )}
-        </section>
-
-        <section className="card">
-          <h2>KYC — atención requerida</h2>
-          {expiringKyc.length === 0 ? (
-            <p className="empty-state">Sin KYC vencidos o por vencer</p>
-          ) : (
-            <div className="mini-list">
-              {expiringKyc.slice(0, 5).map((kyc) => (
-                <Link key={kyc.id} to={`/clientes/${kyc.client_id}`} className="mini-list-item">
-                  <strong>{kyc.clients?.name}</strong>
-                  <Badge variant={kyc.status === 'vencido' ? 'danger' : 'warning'}>
-                    {kyc.status === 'vencido' ? 'Vencido' : `Vence ${formatDate(kyc.expires_at)}`}
-                  </Badge>
-                </Link>
-              ))}
-            </div>
           )}
         </section>
       </div>

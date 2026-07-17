@@ -13,6 +13,9 @@ import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { LegalLibraryPage } from './pages/LegalLibraryPage'
+import { OperationsPage } from './pages/OperationsPage'
+import { CalendarPage } from './pages/CalendarPage'
+import { ActivityLogPage } from './pages/ActivityLogPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { profile, loading } = useAuth()
@@ -33,7 +36,10 @@ function AppRoutes() {
       <Route path="/expedientes" element={<ProtectedRoute><ExpedientesPage /></ProtectedRoute>} />
       <Route path="/expedientes/:id" element={<ProtectedRoute><ExpedienteDetailPage /></ProtectedRoute>} />
       <Route path="/kyc" element={<ProtectedRoute><KycPage /></ProtectedRoute>} />
+      <Route path="/operaciones" element={<ProtectedRoute><OperationsPage /></ProtectedRoute>} />
+      <Route path="/calendario" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
       <Route path="/alertas" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
+      <Route path="/bitacora" element={<ProtectedRoute><ActivityLogPage /></ProtectedRoute>} />
       <Route path="/reportes" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
       <Route path="/biblioteca" element={<ProtectedRoute><LegalLibraryPage /></ProtectedRoute>} />
       <Route path="/buscar" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />

@@ -5,11 +5,15 @@ import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EditClientModal } from '../components/clients/EditClientModal'
+import { ComplianceBadge } from '../components/clients/ComplianceBadge'
+import { ClientTimeline } from '../components/clients/ClientTimeline'
 import { DocumentsPanel } from '../components/documents/DocumentsPanel'
+import { RiskMatrixPanel } from '../components/kyc/RiskMatrixPanel'
 import { SanctionsPanel } from '../components/kyc/SanctionsPanel'
 import { deleteClient } from '../lib/api'
+import { getClientCompliance } from '../lib/compliance'
 import { useAuth } from '../context/AuthContext'
-import { useClients, useExpedientes, useKycRecords } from '../hooks/useData'
+import { useAlerts, useClientActivity, useClients, useExpedientes, useKycRecords } from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { formatDate } from '../lib/utils'
 
@@ -20,16 +24,18 @@ export function ClientDetailPage() {
   const { clients, refetch } = useClients()
   const { expedientes } = useExpedientes()
   const { records: kycRecords, refetch: refetchKyc } = useKycRecords()
+  const { alerts } = useAlerts()
+  const { activity } = useClientActivity(id ?? '')
   const [editing, setEditing] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   const canDelete = profile?.role !== 'asistente'
-
   const client = clients.find((c) => c.id === id)
   const clientExpedientes = expedientes.filter((e) => e.client_id === id)
   const clientKyc = kycRecords.filter((k) => k.client_id === id)
-  const latestKyc = clientKyc[0]
+  const latestKyc = clientKyc.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0]
+  const clientAlerts = alerts.filter((a) => a.client_id === id)
 
   if (!client) {
     return (
@@ -38,6 +44,9 @@ export function ClientDetailPage() {
       </div>
     )
   }
+
+  const risk = client.matrix_risk_level ?? client.risk_level
+  const compliance = getClientCompliance(client, clientKyc, expedientes, alerts)
 
   return (
     <div className="page">
@@ -55,8 +64,8 @@ export function ClientDetailPage() {
           </p>
         </div>
         <div className="header-actions">
-          <Badge variant={client.risk_level === 'bajo' ? 'success' : client.risk_level === 'medio' ? 'warning' : 'danger'}>
-            Riesgo {RISK_LABELS[client.risk_level]}
+          <Badge variant={risk === 'bajo' ? 'success' : risk === 'medio' ? 'warning' : 'danger'}>
+            Riesgo {RISK_LABELS[risk]}
           </Badge>
           {client.vulnerable_activity && <Badge variant="danger">Act. vulnerable</Badge>}
           <Button variant="secondary" onClick={() => setEditing(true)}>
@@ -69,6 +78,8 @@ export function ClientDetailPage() {
           )}
         </div>
       </header>
+
+      <ComplianceBadge summary={compliance} />
 
       <div className="detail-grid">
         <section className="card">
@@ -83,12 +94,11 @@ export function ClientDetailPage() {
             <dt>Actividad vulnerable</dt><dd>{client.vulnerable_activity ? 'Sí' : 'No'}</dd>
             <dt>Registrado</dt><dd>{formatDate(client.created_at)}</dd>
           </dl>
-          {client.notes && (
-            <>
-              <h3>Notas</h3>
-              <p>{client.notes}</p>
-            </>
-          )}
+        </section>
+
+        <section className="card card-wide">
+          <h2>Matriz de riesgo</h2>
+          <RiskMatrixPanel client={client} onUpdated={refetch} />
         </section>
 
         <section className="card">
@@ -115,10 +125,8 @@ export function ClientDetailPage() {
             <div className="mini-list">
               {clientKyc.map((kyc) => (
                 <Link key={kyc.id} to="/kyc" className="mini-list-item">
-                  <strong>Score: {kyc.risk_score}/100</strong>
-                  <Badge variant={kyc.status === 'aprobado' ? 'success' : kyc.status === 'rechazado' ? 'danger' : 'warning'}>
-                    {kyc.status}
-                  </Badge>
+                  <strong>{kyc.checklist_completion ?? kyc.risk_score}% docs</strong>
+                  <Badge variant={kyc.status === 'aprobado' ? 'success' : 'warning'}>{kyc.status}</Badge>
                 </Link>
               ))}
             </div>
@@ -129,18 +137,23 @@ export function ClientDetailPage() {
           <SanctionsPanel client={client} kyc={latestKyc ?? null} onUpdated={refetchKyc} />
         </section>
 
+        <section className="card card-wide">
+          <h2>Línea de tiempo 360°</h2>
+          <ClientTimeline
+            expedientes={clientExpedientes}
+            kycList={clientKyc}
+            activity={activity}
+            alerts={clientAlerts}
+          />
+        </section>
+
         <section className="card full-width">
           <h2>Documentos del cliente</h2>
           <DocumentsPanel clientId={client.id} />
         </section>
       </div>
 
-      <EditClientModal
-        client={editing ? client : null}
-        onClose={() => setEditing(false)}
-        onUpdated={refetch}
-      />
-
+      <EditClientModal client={editing ? client : null} onClose={() => setEditing(false)} onUpdated={refetch} />
       <ConfirmDialog
         open={deleteOpen}
         title="Eliminar cliente"

@@ -4,19 +4,21 @@ import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
+import { AssignSelect } from '../ui/AssignSelect'
 import { createExpediente } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
-import type { Client, MatterType, Priority } from '../../lib/types'
+import type { Client, MatterType, Priority, Profile } from '../../lib/types'
 import { MATTER_TYPE_LABELS } from '../../lib/types'
 
 interface NewExpedienteModalProps {
   open: boolean
   onClose: () => void
   clients: Client[]
+  profiles: Profile[]
   onCreated: () => void
 }
 
-export function NewExpedienteModal({ open, onClose, clients, onCreated }: NewExpedienteModalProps) {
+export function NewExpedienteModal({ open, onClose, clients, profiles, onCreated }: NewExpedienteModalProps) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [clientId, setClientId] = useState('')
@@ -24,6 +26,7 @@ export function NewExpedienteModal({ open, onClose, clients, onCreated }: NewExp
   const [matterType, setMatterType] = useState<MatterType>('pld')
   const [priority, setPriority] = useState<Priority>('media')
   const [description, setDescription] = useState('')
+  const [assignedTo, setAssignedTo] = useState(user?.id ?? '')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -33,6 +36,7 @@ export function NewExpedienteModal({ open, onClose, clients, onCreated }: NewExp
     setMatterType('pld')
     setPriority('media')
     setDescription('')
+    setAssignedTo(user?.id ?? '')
     setError('')
   }
 
@@ -56,7 +60,14 @@ export function NewExpedienteModal({ open, onClose, clients, onCreated }: NewExp
     setError('')
 
     const result = await createExpediente(
-      { client_id: clientId, title, matter_type: matterType, description, priority },
+      {
+        client_id: clientId,
+        title,
+        matter_type: matterType,
+        description,
+        priority,
+        assigned_to: assignedTo || undefined,
+      },
       user?.id,
     )
 
@@ -91,13 +102,7 @@ export function NewExpedienteModal({ open, onClose, clients, onCreated }: NewExp
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </Select>
-          <Input
-            label="Título del asunto *"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ej. Implementación programa PLD 2026"
-            required
-          />
+          <Input label="Título del asunto *" value={title} onChange={(e) => setTitle(e.target.value)} required />
           <Select label="Tipo de asunto" value={matterType} onChange={(e) => setMatterType(e.target.value as MatterType)}>
             {(Object.keys(MATTER_TYPE_LABELS) as MatterType[]).map((type) => (
               <option key={type} value={type}>{MATTER_TYPE_LABELS[type]}</option>
@@ -109,17 +114,12 @@ export function NewExpedienteModal({ open, onClose, clients, onCreated }: NewExp
             <option value="alta">Alta</option>
             <option value="urgente">Urgente</option>
           </Select>
-          <Input
-            label="Descripción"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <AssignSelect value={assignedTo} onChange={setAssignedTo} profiles={profiles} />
+          <Input label="Descripción" value={description} onChange={(e) => setDescription(e.target.value)} />
           {error && <p className="form-error">{error}</p>}
           <div className="modal-actions">
             <Button type="button" variant="secondary" onClick={handleClose}>Cancelar</Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Creando...' : 'Crear expediente'}
-            </Button>
+            <Button type="submit" disabled={submitting}>{submitting ? 'Creando...' : 'Crear expediente'}</Button>
           </div>
         </form>
       )}

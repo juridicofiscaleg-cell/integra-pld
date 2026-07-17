@@ -6,17 +6,24 @@ async function parseFunctionError(error: unknown): Promise<string> {
   if (error instanceof FunctionsHttpError) {
     try {
       const body = await error.context.json()
-      if (body?.error) return String(body.error)
+      if (body?.error) return humanizeSanctionsError(String(body.error))
     } catch {
       /* response body not json */
     }
-    return error.message
+    return humanizeSanctionsError(error.message)
   }
   if (error instanceof FunctionsRelayError || error instanceof FunctionsFetchError) {
-    return error.message
+    return humanizeSanctionsError(error.message)
   }
-  if (error instanceof Error) return error.message
+  if (error instanceof Error) return humanizeSanctionsError(error.message)
   return 'Error desconocido al consultar listas'
+}
+
+function humanizeSanctionsError(message: string): string {
+  if (/429|rate limit|cuota mensual/i.test(message)) {
+    return 'Cuota mensual de OpenSanctions agotada. Las verificaciones de prueba consumen la API rápido. Espera al próximo mes, pide más cuota en opensanctions.org, o usa otra API key en Supabase Secrets.'
+  }
+  return message
 }
 
 async function runSimulatedCheck(_clientName: string, _rfc?: string): Promise<SanctionsResult[]> {

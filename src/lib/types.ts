@@ -16,6 +16,68 @@ export type KycStatus = 'pendiente' | 'en_revision' | 'aprobado' | 'rechazado' |
 export type AlertType = 'vencimiento' | 'kyc' | 'etapa' | 'documento' | 'general'
 export type Priority = 'baja' | 'media' | 'alta' | 'urgente'
 
+export type NoticeType = 'inusual' | 'relevante' | '24h'
+export type NoticeStatus = 'borrador' | 'presentado' | 'archivado'
+
+export interface BeneficialOwner {
+  id: string
+  name: string
+  nationality?: string
+  ownership_percent?: number
+  is_pep?: boolean
+  rfc?: string
+  notes?: string
+}
+
+export interface PepQuestionnaire {
+  is_pep: boolean
+  position?: string
+  institution?: string
+  country?: string
+  family_pep?: boolean
+  family_relation?: string
+  close_associate?: boolean
+  associate_details?: string
+  last_updated?: string
+}
+
+export interface PldOperation {
+  id: string
+  client_id: string
+  expediente_id?: string
+  operation_date: string
+  operation_type: string
+  amount?: number
+  currency: string
+  description?: string
+  unusual: boolean
+  reported: boolean
+  report_date?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
+  clients?: Client
+  expedientes?: Expediente
+}
+
+export interface UnusualNotice {
+  id: string
+  client_id: string
+  operation_id?: string
+  notice_type: NoticeType
+  status: NoticeStatus
+  title: string
+  narrative?: string
+  amount?: number
+  detected_at: string
+  submitted_at?: string
+  created_by?: string
+  assigned_to?: string
+  created_at: string
+  updated_at: string
+  clients?: Client
+}
+
 export interface Profile {
   id: string
   full_name: string
@@ -40,6 +102,8 @@ export interface Client {
   vulnerable_activity?: boolean
   notes?: string
   risk_level: RiskLevel
+  risk_matrix?: Record<string, unknown>
+  matrix_risk_level?: RiskLevel
   created_by?: string
   created_at: string
   updated_at: string
@@ -128,6 +192,10 @@ export interface KycRecord {
   sanctions_check: boolean
   sanctions_results?: SanctionsResults
   beneficial_owner?: string
+  beneficial_owners?: BeneficialOwner[]
+  pep_questionnaire?: PepQuestionnaire
+  renewal_of?: string
+  checklist_completion?: number
   review_notes?: string
   reviewed_by?: string
   reviewed_at?: string
@@ -149,6 +217,7 @@ export interface Document {
   file_size?: number
   uploaded_by?: string
   uploaded_at: string
+  legal_resource_id?: string
 }
 
 export interface Alert {
@@ -225,6 +294,29 @@ export const RISK_LABELS: Record<RiskLevel, string> = {
   alto: 'Alto',
   critico: 'Crítico',
 }
+
+export const NOTICE_TYPE_LABELS: Record<NoticeType, string> = {
+  inusual: 'Operación inusual',
+  relevante: 'Operación relevante',
+  '24h': 'Aviso 24 horas',
+}
+
+export const NOTICE_STATUS_LABELS: Record<NoticeStatus, string> = {
+  borrador: 'Borrador',
+  presentado: 'Presentado',
+  archivado: 'Archivado',
+}
+
+export const OPERATION_TYPES = [
+  'Compra-venta',
+  'Arrendamiento',
+  'Préstamo',
+  'Inversión',
+  'Donación',
+  'Servicios profesionales',
+  'Transferencia',
+  'Otro',
+] as const
 
 export const KYC_CHECKLIST_ITEMS: { key: keyof KycChecklist; label: string }[] = [
   { key: 'identificacion', label: 'Identificación oficial' },

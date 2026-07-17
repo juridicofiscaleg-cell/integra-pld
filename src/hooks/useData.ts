@@ -18,7 +18,9 @@ import type {
   ExpedienteStage,
   KycRecord,
   LegalResource,
+  PldOperation,
   Profile,
+  UnusualNotice,
 } from '../lib/types'
 
 export function useClients() {
@@ -209,6 +211,59 @@ export function useActivity() {
   return { activity, loading }
 }
 
+export function useActivityLog(limit = 500) {
+  const [activity, setActivity] = useState<ActivityLog[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function fetchActivity() {
+    if (!isSupabaseConfigured) {
+      setActivity(DEMO_ACTIVITY)
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data } = await supabase!
+      .from('activity_log')
+      .select('*, profiles(*)')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    setActivity(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchActivity()
+  }, [limit])
+
+  return { activity, loading, refetch: fetchActivity }
+}
+
+export function useClientActivity(clientId: string) {
+  const [activity, setActivity] = useState<ActivityLog[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!clientId) return
+    if (!isSupabaseConfigured) {
+      setActivity(DEMO_ACTIVITY.filter((a) => a.client_id === clientId))
+      setLoading(false)
+      return
+    }
+    supabase!
+      .from('activity_log')
+      .select('*, profiles(*)')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        setActivity(data ?? [])
+        setLoading(false)
+      })
+  }, [clientId])
+
+  return { activity, loading }
+}
+
 export function useSearch(query: string) {
   const [results, setResults] = useState<{
     clients: Client[]
@@ -303,4 +358,56 @@ export function useLegalResources() {
   }, [])
 
   return { resources, loading, refetch: fetchResources }
+}
+
+export function usePldOperations() {
+  const [operations, setOperations] = useState<PldOperation[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function fetchOps() {
+    if (!isSupabaseConfigured) {
+      setOperations([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data } = await supabase!
+      .from('pld_operations')
+      .select('*, clients(*)')
+      .order('operation_date', { ascending: false })
+    setOperations(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchOps()
+  }, [])
+
+  return { operations, loading, refetch: fetchOps }
+}
+
+export function useUnusualNotices() {
+  const [notices, setNotices] = useState<UnusualNotice[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function fetchNotices() {
+    if (!isSupabaseConfigured) {
+      setNotices([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data } = await supabase!
+      .from('unusual_notices')
+      .select('*, clients(*)')
+      .order('detected_at', { ascending: false })
+    setNotices(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchNotices()
+  }, [])
+
+  return { notices, loading, refetch: fetchNotices }
 }

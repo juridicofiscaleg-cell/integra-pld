@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Mail, Trash2 } from 'lucide-react'
+import { ArrowLeft, Mail, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { Timeline } from '../components/timeline/Timeline'
+import { StageNotesModal } from '../components/timeline/StageNotesModal'
 import { DocumentsPanel } from '../components/documents/DocumentsPanel'
 import { ClientUpdateEmailModal } from '../components/expedientes/ClientUpdateEmailModal'
-import { useExpediente } from '../hooks/useData'
-import { advanceStage, deleteExpediente, revertStage } from '../lib/api'
+import { EditExpedienteModal } from '../components/expedientes/EditExpedienteModal'
+import { useExpediente, useProfiles } from '../hooks/useData'
+import { advanceStage, deleteExpediente, revertStage, updateStageNotes } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { MATTER_TYPE_LABELS, STATUS_LABELS } from '../lib/types'
 import { getProgressPercent } from '../lib/workflows'
@@ -18,14 +20,18 @@ export function ExpedienteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user, profile } = useAuth()
+  const { profiles } = useProfiles()
   const { expediente, stages, loading, refetch } = useExpediente(id ?? '')
   const [advancing, setAdvancing] = useState(false)
   const [error, setError] = useState('')
   const [emailOpen, setEmailOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [pendingStage, setPendingStage] = useState<number | null>(null)
 
   const canDelete = profile?.role !== 'asistente'
+  const assignee = profiles.find((p) => p.id === expediente?.assigned_to)
 
   if (loading) return <div className="page"><p className="loading">Cargando...</p></div>
 
@@ -40,12 +46,13 @@ export function ExpedienteDetailPage() {
   const progress = getProgressPercent(expediente.current_stage_index, stages.length)
   const isClosed = expediente.status === 'cerrado' || expediente.status === 'archivado'
 
-  async function handleAdvance(stageIndex: number) {
-    if (!id) return
+  async function handleAdvanceWithNotes(notes: string) {
+    if (!id || pendingStage === null) return
     setAdvancing(true)
     setError('')
-    const result = await advanceStage(id, stageIndex, user?.id)
+    const result = await advanceStage(id, pendingStage, user?.id, notes)
     setAdvancing(false)
+    setPendingStage(null)
     if (result.error) setError(result.error)
     else refetch()
   }
@@ -81,11 +88,15 @@ export function ExpedienteDetailPage() {
           <p>
             <Link to={`/clientes/${expediente.client_id}`}>{expediente.clients?.name}</Link>
             {' · '}Abierto {formatDate(expediente.opened_at)}
+            {assignee && ` · Responsable: ${assignee.full_name}`}
           </p>
         </div>
         <div className="header-actions">
           <Badge variant="info">{MATTER_TYPE_LABELS[expediente.matter_type]}</Badge>
           <Badge variant={isClosed ? 'muted' : 'success'}>{STATUS_LABELS[expediente.status]}</Badge>
+          <Button variant="secondary" onClick={() => setEditOpen(true)}>
+            <Pencil size={16} /> Editar
+          </Button>
           <Button variant="secondary" onClick={() => setEmailOpen(true)}>
             <Mail size={16} /> Avisar cliente
           </Button>
@@ -115,9 +126,13 @@ export function ExpedienteDetailPage() {
           <Timeline
             stages={stages}
             currentIndex={expediente.current_stage_index}
-            readonly={advancing}
-            onAdvance={handleAdvance}
+            readonly={advancing || isClosed}
+            onAdvance={(idx) => setPendingStage(idx)}
             onRevert={handleRevert}
+            onEditNotes={async (stageId, notes) => {
+              await updateStageNotes(stageId, notes, user?.id)
+              refetch()
+            }}
           />
         </section>
 
@@ -125,6 +140,8 @@ export function ExpedienteDetailPage() {
           <h2>Detalles</h2>
           <dl className="detail-list">
             <dt>Prioridad</dt><dd>{expediente.priority}</dd>
+            <dt>Estado</dt><dd>{STATUS_LABELS[expediente.status]}</dd>
+            <dt>Responsable</dt><dd>{assignee?.full_name ?? '—'}</dd>
             <dt>Descripción</dt><dd>{expediente.description ?? '—'}</dd>
             <dt>Última actualización</dt><dd>{formatDate(expediente.updated_at)}</dd>
             {expediente.closed_at && (
@@ -141,6 +158,21 @@ export function ExpedienteDetailPage() {
         </section>
       </div>
 
+      <StageNotesModal
+        open={pendingStage !== null}
+        stageName={pendingStage !== null ? stages.find((s) => s.stage_index === pendingStage)?.name ?? '' : ''}
+        onClose={() => setPendingStage(null)}
+        onConfirm={handleAdvanceWithNotes}
+        loading={advancing}
+      />
+
+      <EditExpedienteModal
+        expediente={editOpen ? expediente : null}
+        profiles={profiles}
+        onClose={() => setEditOpen(false)}
+        onUpdated={refetch}
+      />
+
       <ClientUpdateEmailModal
         open={emailOpen}
         onClose={() => setEmailOpen(false)}
@@ -152,7 +184,7 @@ export function ExpedienteDetailPage() {
       <ConfirmDialog
         open={deleteOpen}
         title="Eliminar expediente"
-        message={`¿Eliminar "${expediente.title}" y todo su historial? Esta acción no se puede deshacer.`}
+        message={`¿Eliminar "${expediente.title}" y todo su historial?`}
         confirmLabel="Eliminar"
         danger
         loading={deleting}

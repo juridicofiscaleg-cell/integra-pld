@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil, Plus, Shield, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { FilterBar } from '../components/ui/FilterBar'
 import { deleteKycRecord } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { NewKycModal } from '../components/kyc/NewKycModal'
@@ -35,35 +36,70 @@ export function KycPage() {
   const [editing, setEditing] = useState<KycRecord | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<KycRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [pepFilter, setPepFilter] = useState('')
 
   const canDelete = profile?.role !== 'asistente'
+
+  const filtered = useMemo(() => {
+    return records.filter((k) => {
+      const name = k.clients?.name?.toLowerCase() ?? ''
+      if (search && !name.includes(search.toLowerCase())) return false
+      if (statusFilter && k.status !== statusFilter) return false
+      if (pepFilter === 'yes' && !k.pep) return false
+      if (pepFilter === 'no' && k.pep) return false
+      return true
+    })
+  }, [records, search, statusFilter, pepFilter])
 
   return (
     <div className="page">
       <header className="page-header">
         <div>
           <h1>KYC / Debida Diligencia</h1>
-          <p>Verificación y cumplimiento de clientes</p>
+          <p>{filtered.length} registros</p>
         </div>
         <Button onClick={() => setModalOpen(true)}>
           <Plus size={16} /> Nuevo KYC
         </Button>
       </header>
 
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Buscar cliente..."
+        filters={[
+          {
+            label: 'Estado',
+            value: statusFilter,
+            onChange: setStatusFilter,
+            options: [{ value: '', label: 'Todos' }, ...Object.entries(KYC_STATUS_LABELS).map(([k, v]) => ({ value: k, label: v }))],
+          },
+          {
+            label: 'PEP',
+            value: pepFilter,
+            onChange: setPepFilter,
+            options: [
+              { value: '', label: 'Todos' },
+              { value: 'yes', label: 'PEP' },
+              { value: 'no', label: 'No PEP' },
+            ],
+          },
+        ]}
+      />
+
       {loading ? (
         <p className="loading">Cargando...</p>
-      ) : records.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="empty-card">
           <h2>Sin registros KYC</h2>
-          <p>Crea un KYC para iniciar la debida diligencia de un cliente.</p>
-          <Button onClick={() => setModalOpen(true)}>
-            <Plus size={16} /> Nuevo KYC
-          </Button>
+          <Button onClick={() => setModalOpen(true)}><Plus size={16} /> Nuevo KYC</Button>
         </div>
       ) : (
         <div className="kyc-cards">
-          {records.map((kyc) => {
-            const progress = checklistProgress(kyc.checklist)
+          {filtered.map((kyc) => {
+            const progress = kyc.checklist_completion ?? checklistProgress(kyc.checklist)
             return (
               <div key={kyc.id} className="kyc-card">
                 <div className="kyc-card-header">
@@ -75,9 +111,7 @@ export function KycPage() {
                     <span>Creado {formatDate(kyc.created_at)}</span>
                   </div>
                   <div className="kyc-card-actions">
-                    <Badge variant={statusVariant[kyc.status]}>
-                      {KYC_STATUS_LABELS[kyc.status]}
-                    </Badge>
+                    <Badge variant={statusVariant[kyc.status]}>{KYC_STATUS_LABELS[kyc.status]}</Badge>
                     <button type="button" className="icon-btn" onClick={() => setEditing(kyc)} title="Editar">
                       <Pencil size={16} />
                     </button>
@@ -90,28 +124,11 @@ export function KycPage() {
                 </div>
 
                 <div className="kyc-score">
-                  <span className="score-label">Score de riesgo</span>
+                  <span className="score-label">Documentación completada</span>
                   <div className="score-bar">
-                    <div
-                      className={`score-fill ${kyc.risk_score > 60 ? 'high' : kyc.risk_score > 30 ? 'medium' : 'low'}`}
-                      style={{ width: `${kyc.risk_score}%` }}
-                    />
+                    <div className={`score-fill ${progress > 60 ? 'high' : progress > 30 ? 'medium' : 'low'}`} style={{ width: `${progress}%` }} />
                   </div>
-                  <span className="score-value">{kyc.risk_score}/100</span>
-                </div>
-
-                <div className="kyc-checklist">
-                  <span className="checklist-header">Documentación ({progress}%)</span>
-                  <div className="checklist-grid">
-                    {KYC_CHECKLIST_ITEMS.map((item) => (
-                      <div
-                        key={item.key}
-                        className={`checklist-item ${kyc.checklist[item.key] ? 'done' : 'pending'}`}
-                      >
-                        {kyc.checklist[item.key] ? '✓' : '○'} {item.label}
-                      </div>
-                    ))}
-                  </div>
+                  <span className="score-value">{progress}%</span>
                 </div>
 
                 <div className="kyc-flags">
@@ -120,6 +137,7 @@ export function KycPage() {
                   {kyc.sanctions_results && Object.values(kyc.sanctions_results).some((r) => r.match) && (
                     <Badge variant="danger">Coincidencia en listas</Badge>
                   )}
+                  {kyc.renewal_of && <Badge variant="info">Renovación</Badge>}
                   {kyc.expires_at && (
                     <span className={`kyc-expiry ${kyc.status === 'vencido' ? 'overdue-text' : ''}`}>
                       Vence: {formatDate(kyc.expires_at)}
@@ -132,20 +150,8 @@ export function KycPage() {
         </div>
       )}
 
-      <NewKycModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        clients={clients}
-        expedientes={expedientes}
-        onCreated={refetch}
-      />
-
-      <EditKycModal
-        kyc={editing}
-        onClose={() => setEditing(null)}
-        onUpdated={refetch}
-      />
-
+      <NewKycModal open={modalOpen} onClose={() => setModalOpen(false)} clients={clients} expedientes={expedientes} onCreated={refetch} />
+      <EditKycModal kyc={editing} onClose={() => setEditing(null)} onUpdated={refetch} />
       <ConfirmDialog
         open={!!deleteTarget}
         title="Eliminar KYC"

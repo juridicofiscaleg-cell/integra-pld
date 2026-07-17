@@ -1,13 +1,14 @@
-import { Check, Circle, Clock, Lock } from 'lucide-react'
+import { useState } from 'react'
+import { Check, Circle, Clock, Lock, Pencil } from 'lucide-react'
 import type { ExpedienteStage } from '../../lib/types'
-import { cn } from '../../lib/utils'
-import { formatDate } from '../../lib/utils'
+import { cn, formatDate } from '../../lib/utils'
 
 interface TimelineProps {
   stages: ExpedienteStage[]
   currentIndex: number
   onAdvance?: (stageIndex: number) => void
   onRevert?: (stageIndex: number) => void
+  onEditNotes?: (stageId: string, notes: string) => void
   readonly?: boolean
 }
 
@@ -18,11 +19,24 @@ const statusIcon = {
   bloqueada: Lock,
 }
 
-export function Timeline({ stages, currentIndex, onAdvance, onRevert, readonly }: TimelineProps) {
+export function Timeline({ stages, currentIndex, onAdvance, onRevert, onEditNotes, readonly }: TimelineProps) {
+  const [editingNotesId, setEditingNotesId] = useState<string | null>(null)
+  const [notesDraft, setNotesDraft] = useState('')
+
   const lastCompletedIndex = stages.reduce(
     (acc, s, i) => (s.status === 'completada' ? i : acc),
     -1,
   )
+
+  function startEditNotes(stage: ExpedienteStage) {
+    setEditingNotesId(stage.id)
+    setNotesDraft(stage.notes ?? '')
+  }
+
+  async function saveNotes(stageId: string) {
+    await onEditNotes?.(stageId, notesDraft)
+    setEditingNotesId(null)
+  }
 
   return (
     <div className="timeline">
@@ -51,24 +65,40 @@ export function Timeline({ stages, currentIndex, onAdvance, onRevert, readonly }
                   {stage.status.replace('_', ' ')}
                 </span>
               </div>
-              {stage.notes && <p className="timeline-notes">{stage.notes}</p>}
+              {editingNotesId === stage.id ? (
+                <div className="timeline-notes-edit">
+                  <textarea
+                    value={notesDraft}
+                    onChange={(e) => setNotesDraft(e.target.value)}
+                    rows={3}
+                    placeholder="Notas de la etapa..."
+                  />
+                  <div className="form-actions">
+                    <button type="button" className="timeline-action" onClick={() => setEditingNotesId(null)}>Cancelar</button>
+                    <button type="button" className="timeline-action" onClick={() => saveNotes(stage.id)}>Guardar notas</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {stage.notes && <p className="timeline-notes">{stage.notes}</p>}
+                  {!readonly && onEditNotes && (
+                    <button type="button" className="timeline-action timeline-action-muted" onClick={() => startEditNotes(stage)}>
+                      <Pencil size={12} /> {stage.notes ? 'Editar notas' : 'Agregar notas'}
+                    </button>
+                  )}
+                </>
+              )}
               <div className="timeline-dates">
                 {stage.started_at && <span>Inicio: {formatDate(stage.started_at)}</span>}
                 {stage.completed_at && <span>Completada: {formatDate(stage.completed_at)}</span>}
               </div>
               {!readonly && stage.status === 'en_progreso' && onAdvance && (
-                <button
-                  className="timeline-action"
-                  onClick={() => onAdvance(stage.stage_index)}
-                >
+                <button className="timeline-action" onClick={() => onAdvance(stage.stage_index)}>
                   Marcar como completada →
                 </button>
               )}
               {!readonly && isDone && onRevert && i === lastCompletedIndex && (
-                <button
-                  className="timeline-action timeline-action-revert"
-                  onClick={() => onRevert(stage.stage_index)}
-                >
+                <button className="timeline-action timeline-action-revert" onClick={() => onRevert(stage.stage_index)}>
                   ← Deshacer completado
                 </button>
               )}

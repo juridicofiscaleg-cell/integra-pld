@@ -3,11 +3,14 @@ import {
   AlertTriangle,
   BookOpen,
   Briefcase,
+  Calendar,
+  ClipboardList,
   FileCheck,
   FileSpreadsheet,
   FolderOpen,
   LayoutDashboard,
   LogOut,
+  Scale,
   Search,
   Settings,
   Users,
@@ -20,8 +23,11 @@ const navItems = [
   { to: '/clientes', icon: Users, label: 'Clientes' },
   { to: '/expedientes', icon: FolderOpen, label: 'Expedientes' },
   { to: '/kyc', icon: FileCheck, label: 'KYC' },
+  { to: '/operaciones', icon: Scale, label: 'Operaciones' },
+  { to: '/calendario', icon: Calendar, label: 'Calendario' },
   { to: '/biblioteca', icon: BookOpen, label: 'Biblioteca' },
   { to: '/alertas', icon: AlertTriangle, label: 'Alertas' },
+  { to: '/bitacora', icon: ClipboardList, label: 'Bitácora' },
   { to: '/reportes', icon: FileSpreadsheet, label: 'Reportes' },
   { to: '/buscar', icon: Search, label: 'Buscar' },
 ]
@@ -46,7 +52,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Link
               key={to}
               to={to}
-              className={cn('nav-link', pathname === to && 'nav-link-active')}
+              className={cn('nav-link', (pathname === to || (to !== '/' && pathname.startsWith(to))) && 'nav-link-active')}
             >
               <Icon size={18} />
               {label}
