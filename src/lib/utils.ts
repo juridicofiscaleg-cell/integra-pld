@@ -24,3 +24,10 @@ export function isOverdue(date: string | undefined): boolean {
 export function cn(...classes: (string | false | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ')
 }
+
+/** URL absoluta respetando VITE_BASE_PATH (GitHub Pages: /integra-pld/) */
+export function appUrl(path = ''): string {
+  const base = import.meta.env.BASE_URL || '/'
+  const cleanPath = path.replace(/^\//, '')
+  return `${window.location.origin}${base}${cleanPath}`
+}

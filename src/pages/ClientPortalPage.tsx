@@ -4,6 +4,7 @@ import { KeyRound } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Modal } from '../components/ui/Modal'
+import { appUrl } from '../lib/utils'
 
 export function ClientPortalPage() {
   return (
@@ -81,7 +82,7 @@ export function ClientAccessInviteModal({
           <div className="modal-actions">
             <Button
               onClick={async () => {
-                const text = `Código de acceso Integra PLD para ${clientName}: ${result.code}\nRegistro: ${window.location.origin}${import.meta.env.BASE_URL}login?modo=cliente`
+                const text = `Código de acceso Integra PLD para ${clientName}: ${result.code}\nRegistro: ${appUrl('login?modo=cliente')}`
                 await navigator.clipboard.writeText(text)
               }}
             >
