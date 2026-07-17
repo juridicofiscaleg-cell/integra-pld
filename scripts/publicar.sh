@@ -5,12 +5,10 @@ cd "$(dirname "$0")/.."
 
 MSG="${1:-Integra PLD — actualización}"
 
-git fetch origin main 2>/dev/null || true
+git fetch origin main
 
-# Restaurar workflow remoto — Cursor OAuth no tiene scope "workflow"
-if [ -f .github/workflows/deploy.yml ]; then
-  git checkout origin/main -- .github/workflows/deploy.yml 2>/dev/null || true
-fi
+# Mantener deploy.yml del remoto (incluye cambios hechos en github.com)
+git checkout origin/main -- .github/workflows/deploy.yml 2>/dev/null || true
 
 if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git status --porcelain)" ]; then
   git add .
@@ -20,7 +18,7 @@ else
   echo "ℹ No hay cambios nuevos para commitear."
 fi
 
-git pull origin main --no-edit
+git pull origin main --no-rebase --no-edit
 git push origin push-clean:main
 
 echo ""
