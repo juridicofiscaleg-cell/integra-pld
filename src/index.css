@@ -365,6 +365,11 @@ a:hover { text-decoration: underline; }
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.kyc-card-highlighted {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .kyc-card-header { display: flex; align-items: flex-start; gap: 0.75rem; }
@@ -1037,11 +1042,19 @@ code { background: var(--bg); padding: 0.15rem 0.4rem; border-radius: 4px; font-
 .card-wide { grid-column: span 2; }
 @media (max-width: 900px) { .card-wide { grid-column: span 1; } }
 
+.table-card { overflow-x: auto; }
+.client-ops-panel .row-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.diagnosis-row { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+.exp-comment { padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
+.exp-comment-form { display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 1rem; }
+.exp-comment-form .form-field { flex: 1; margin: 0; }
+.compliance-dot-wrap { white-space: nowrap; }
+
 @media (max-width: 900px) {
   .app-shell { flex-direction: column; }
   .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 1rem; }
   .sidebar-nav { flex-direction: row; flex-wrap: wrap; }
-  .sidebar-footer { display: none; }
+  .sidebar-footer { display: flex; flex-direction: column; width: 100%; margin-top: 0.5rem; }
   .dashboard-grid, .detail-grid { grid-template-columns: 1fr; }
   .main-content { padding: 1rem; }
 }

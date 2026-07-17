@@ -1,5 +1,5 @@
 import { differenceInDays, parseISO } from 'date-fns'
-import type { Alert, Client, Expediente, KycRecord } from './types'
+import type { Alert, Client, Expediente, KycRecord, PldOperation, UnusualNotice } from './types'
 import { calcMatrixRiskLevel, type RiskMatrixFactors } from './risk-matrix'
 
 export type ComplianceStatus = 'verde' | 'amarillo' | 'rojo'
@@ -15,6 +15,8 @@ export function getClientCompliance(
   kycList: KycRecord[],
   expedientes: Expediente[],
   alerts: Alert[],
+  operations: PldOperation[] = [],
+  notices: UnusualNotice[] = [],
 ): ComplianceSummary {
   const issues: string[] = []
   const latestKyc = kycList
@@ -38,6 +40,13 @@ export function getClientCompliance(
   const matrixLevel = client.matrix_risk_level ?? (Object.keys(matrix).length ? calcMatrixRiskLevel(matrix) : null)
   if (matrixLevel === 'alto' || matrixLevel === 'critico') issues.push(`Matriz de riesgo ${matrixLevel}`)
 
+  const clientOps = operations.filter((o) => o.client_id === client.id)
+  const unusualUnreported = clientOps.filter((o) => o.unusual && !o.reported)
+  if (unusualUnreported.length > 0) issues.push(`${unusualUnreported.length} op. inusual(es) sin reportar`)
+
+  const draftNotices = notices.filter((n) => n.client_id === client.id && n.status === 'borrador')
+  if (draftNotices.length > 0) issues.push(`${draftNotices.length} aviso(s) en borrador`)
+
   const activeExp = expedientes.filter((e) => e.client_id === client.id && e.status === 'activo')
   const staleExp = activeExp.filter((e) => differenceInDays(new Date(), parseISO(e.updated_at)) > 7)
   if (staleExp.length > 0) issues.push(`${staleExp.length} expediente(s) sin movimiento +7 días`)
@@ -46,11 +55,9 @@ export function getClientCompliance(
   if (clientAlerts.length > 0) issues.push(`${clientAlerts.length} alerta(s) pendiente(s)`)
 
   let status: ComplianceStatus = 'verde'
-  if (issues.some((i) => /vencido|Coincidencia|critico/.test(i))) status = 'rojo'
+  if (issues.some((i) => /vencido|Coincidencia|critico|sin reportar/.test(i))) status = 'rojo'
   else if (issues.length > 0) status = 'amarillo'
 
-  const label =
-    status === 'verde' ? 'En orden' : status === 'amarillo' ? 'Revisar' : 'Atención urgente'
-
+  const label = status === 'verde' ? 'En orden' : status === 'amarillo' ? 'Revisar' : 'Atención urgente'
   return { status, label, issues }
 }

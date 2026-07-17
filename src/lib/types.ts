@@ -17,6 +17,16 @@ export type AlertType = 'vencimiento' | 'kyc' | 'etapa' | 'documento' | 'general
 export type Priority = 'baja' | 'media' | 'alta' | 'urgente'
 
 export type NoticeType = 'inusual' | 'relevante' | '24h'
+
+export interface DiagnosisItemRef {
+  id: string
+  area: string
+  label: string
+  severity?: 'bajo' | 'medio' | 'alto'
+  notes?: string
+  resolved?: boolean
+}
+
 export type NoticeStatus = 'borrador' | 'presentado' | 'archivado'
 
 export interface BeneficialOwner {
@@ -78,6 +88,49 @@ export interface UnusualNotice {
   clients?: Client
 }
 
+export interface ExpedienteComment {
+  id: string
+  expediente_id: string
+  user_id?: string
+  body: string
+  created_at: string
+  profiles?: Profile
+}
+
+export interface ComplianceManual {
+  id: string
+  title: string
+  version: string
+  description?: string
+  storage_path?: string
+  file_name?: string
+  effective_date: string
+  is_active: boolean
+  uploaded_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TrainingSession {
+  id: string
+  title: string
+  session_date: string
+  topic: string
+  participants?: string
+  duration_hours?: number
+  evidence_path?: string
+  notes?: string
+  created_by?: string
+  created_at: string
+}
+
+export interface ComplianceOfficer {
+  name: string
+  email: string
+  appointed_at?: string
+  rfc?: string
+}
+
 export interface Profile {
   id: string
   full_name: string
@@ -132,6 +185,7 @@ export interface Expediente {
   current_stage_index: number
   priority: Priority
   assigned_to?: string
+  diagnosis_checklist?: DiagnosisItemRef[]
   created_by?: string
   opened_at: string
   closed_at?: string

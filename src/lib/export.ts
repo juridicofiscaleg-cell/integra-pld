@@ -124,6 +124,60 @@ export function exportActivityCsv(
   )
 }
 
+export function exportOperationsCsv(
+  operations: Array<{
+    operation_date: string
+    clients?: { name: string }
+    operation_type: string
+    amount?: number
+    currency: string
+    unusual: boolean
+    reported: boolean
+    report_date?: string
+  }>,
+) {
+  downloadCsv(
+    `integra-pld-operaciones-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Fecha', 'Cliente', 'Tipo', 'Monto', 'Moneda', 'Inusual', 'Reportada', 'Fecha reporte'],
+    operations.map((o) => [
+      o.operation_date,
+      o.clients?.name ?? '',
+      o.operation_type,
+      o.amount?.toString() ?? '',
+      o.currency,
+      o.unusual ? 'Sí' : 'No',
+      o.reported ? 'Sí' : 'No',
+      o.report_date ?? '',
+    ]),
+  )
+}
+
+export function exportNoticesCsv(
+  notices: Array<{
+    detected_at: string
+    clients?: { name: string }
+    notice_type: string
+    status: string
+    title: string
+    amount?: number
+    submitted_at?: string
+  }>,
+) {
+  downloadCsv(
+    `integra-pld-avisos-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Detección', 'Cliente', 'Tipo', 'Estado', 'Título', 'Monto', 'Presentado'],
+    notices.map((n) => [
+      n.detected_at,
+      n.clients?.name ?? '',
+      n.notice_type,
+      n.status,
+      n.title,
+      n.amount?.toString() ?? '',
+      n.submitted_at ?? '',
+    ]),
+  )
+}
+
 export function printReport(
   stats: Record<string, number>,
   clients: unknown[],

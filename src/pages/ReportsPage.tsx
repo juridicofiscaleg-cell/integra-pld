@@ -8,9 +8,11 @@ import {
   exportClientsCsv,
   exportExpedientesCsv,
   exportKycCsv,
+  exportNoticesCsv,
+  exportOperationsCsv,
   printReport,
 } from '../lib/export'
-import { useActivity, useClients, useExpedientes, useKycRecords } from '../hooks/useData'
+import { useActivity, useClients, useExpedientes, useKycRecords, usePldOperations, useUnusualNotices } from '../hooks/useData'
 import { KYC_STATUS_LABELS, RISK_LABELS, STATUS_LABELS } from '../lib/types'
 
 export function ReportsPage() {
@@ -18,6 +20,8 @@ export function ReportsPage() {
   const { expedientes } = useExpedientes()
   const { records: kycRecords } = useKycRecords()
   const { activity } = useActivity()
+  const { operations } = usePldOperations()
+  const { notices } = useUnusualNotices()
   const [riskFilter, setRiskFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
@@ -37,6 +41,8 @@ export function ReportsPage() {
     kycPending: kycRecords.filter((k) => k.status === 'pendiente' || k.status === 'en_revision').length,
     kycExpired: kycRecords.filter((k) => k.status === 'vencido').length,
     pep: kycRecords.filter((k) => k.pep).length,
+    opsUnreported: operations.filter((o) => o.unusual && !o.reported).length,
+    noticesDraft: notices.filter((n) => n.status === 'borrador').length,
   }
 
   return (
@@ -61,6 +67,8 @@ export function ReportsPage() {
           <div><span className="exec-value">{stats.kycPending}</span><span>KYC pendientes</span></div>
           <div><span className="exec-value">{stats.kycExpired}</span><span>KYC vencidos</span></div>
           <div><span className="exec-value">{stats.pep}</span><span>PEP</span></div>
+          <div><span className="exec-value">{stats.opsUnreported}</span><span>Ops. sin reportar</span></div>
+          <div><span className="exec-value">{stats.noticesDraft}</span><span>Avisos borrador</span></div>
         </div>
       </section>
 
@@ -100,6 +108,24 @@ export function ReportsPage() {
           <h2>KYC</h2>
           <p>{kycRecords.length} registros — score, PEP, vencimientos</p>
           <Button onClick={() => exportKycCsv(kycRecords)} disabled={kycRecords.length === 0}>
+            <Download size={16} /> Exportar CSV
+          </Button>
+        </section>
+
+        <section className="card report-card">
+          <FileSpreadsheet size={28} />
+          <h2>Operaciones PLD</h2>
+          <p>{operations.length} registros</p>
+          <Button onClick={() => exportOperationsCsv(operations)} disabled={operations.length === 0}>
+            <Download size={16} /> Exportar CSV
+          </Button>
+        </section>
+
+        <section className="card report-card">
+          <FileSpreadsheet size={28} />
+          <h2>Avisos Art. 21</h2>
+          <p>{notices.length} avisos</p>
+          <Button onClick={() => exportNoticesCsv(notices)} disabled={notices.length === 0}>
             <Download size={16} /> Exportar CSV
           </Button>
         </section>

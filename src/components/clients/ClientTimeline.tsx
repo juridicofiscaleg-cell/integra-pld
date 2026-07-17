@@ -1,16 +1,18 @@
 import { Link } from 'react-router-dom'
-import type { ActivityLog, Alert, Expediente, KycRecord } from '../../lib/types'
+import type { ActivityLog, Alert, Expediente, KycRecord, PldOperation, UnusualNotice } from '../../lib/types'
 import { formatDateTime, formatRelative } from '../../lib/utils'
-import { MATTER_TYPE_LABELS, KYC_STATUS_LABELS } from '../../lib/types'
+import { MATTER_TYPE_LABELS, KYC_STATUS_LABELS, NOTICE_TYPE_LABELS } from '../../lib/types'
 
 interface ClientTimelineProps {
   expedientes: Expediente[]
   kycList: KycRecord[]
   activity: ActivityLog[]
   alerts: Alert[]
+  operations?: PldOperation[]
+  notices?: UnusualNotice[]
 }
 
-export function ClientTimeline({ expedientes, kycList, activity, alerts }: ClientTimelineProps) {
+export function ClientTimeline({ expedientes, kycList, activity, alerts, operations = [], notices = [] }: ClientTimelineProps) {
   type Event = { id: string; date: string; label: string; detail?: string; link?: string }
 
   const events: Event[] = []
@@ -30,7 +32,25 @@ export function ClientTimeline({ expedientes, kycList, activity, alerts }: Clien
       date: kyc.created_at,
       label: `KYC ${KYC_STATUS_LABELS[kyc.status]}`,
       detail: kyc.renewal_of ? 'Renovación' : 'Debida diligencia',
-      link: '/kyc',
+      link: `/kyc?kyc=${kyc.id}`,
+    })
+  }
+  for (const op of operations) {
+    events.push({
+      id: `op-${op.id}`,
+      date: op.operation_date,
+      label: `Operación: ${op.operation_type}`,
+      detail: op.unusual ? 'Inusual' : undefined,
+      link: '/operaciones',
+    })
+  }
+  for (const n of notices) {
+    events.push({
+      id: `notice-${n.id}`,
+      date: n.detected_at,
+      label: `Aviso: ${n.title}`,
+      detail: NOTICE_TYPE_LABELS[n.notice_type],
+      link: '/operaciones',
     })
   }
   for (const a of activity) {

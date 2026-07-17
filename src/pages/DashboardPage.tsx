@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { AlertTriangle, Calendar, FileCheck, FolderOpen, Users } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { useAuth } from '../context/AuthContext'
-import { useActivity, useAlerts, useClients, useExpedientes, useKycRecords, useProfiles } from '../hooks/useData'
+import { useActivity, useAlerts, useClients, useExpedientes, useKycRecords, usePldOperations, useProfiles, useUnusualNotices } from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { getProgressPercent, getWorkflowStages } from '../lib/workflows'
 import { formatDate, formatRelative } from '../lib/utils'
@@ -15,6 +15,8 @@ export function DashboardPage() {
   const { records: kycRecords } = useKycRecords()
   const { alerts } = useAlerts()
   const { activity } = useActivity()
+  const { operations } = usePldOperations()
+  const { notices } = useUnusualNotices()
   const { profiles } = useProfiles()
 
   const profileName = profiles.find((p) => p.id === user?.id)
@@ -31,6 +33,8 @@ export function DashboardPage() {
   const staleExpedientes = activeExpedientes.filter(
     (e) => differenceInDays(new Date(), parseISO(e.updated_at)) > 7,
   )
+  const opsUnreported = operations.filter((o) => o.unusual && !o.reported)
+  const noticesDraft = notices.filter((n) => n.status === 'borrador')
   const vulnerableClients = clients.filter((c) => c.vulnerable_activity)
 
   const stats = [
@@ -106,6 +110,27 @@ export function DashboardPage() {
                   </Badge>
                 </Link>
               ))
+            )}
+          </div>
+          <div>
+            <h3>PLD — pendientes</h3>
+            {opsUnreported.length === 0 && noticesDraft.length === 0 ? (
+              <p className="empty-state">Sin pendientes PLD</p>
+            ) : (
+              <>
+                {opsUnreported.slice(0, 3).map((o) => (
+                  <Link key={o.id} to={`/clientes/${o.client_id}`} className="mini-list-item">
+                    <strong>Op. sin reportar</strong>
+                    <span>{o.clients?.name}</span>
+                  </Link>
+                ))}
+                {noticesDraft.slice(0, 3).map((n) => (
+                  <Link key={n.id} to="/operaciones" className="mini-list-item">
+                    <strong>Aviso borrador</strong>
+                    <span>{n.title}</span>
+                  </Link>
+                ))}
+              </>
             )}
           </div>
           <div>

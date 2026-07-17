@@ -4,8 +4,10 @@ import { Plus } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { FilterBar } from '../components/ui/FilterBar'
+import { ComplianceDot } from '../components/clients/ComplianceDot'
 import { NewClientModal } from '../components/clients/NewClientModal'
-import { useClients } from '../hooks/useData'
+import { useAlerts, useClients, useExpedientes, useKycRecords, usePldOperations, useUnusualNotices } from '../hooks/useData'
+import { getClientCompliance } from '../lib/compliance'
 import { RISK_LABELS } from '../lib/types'
 import { formatDate } from '../lib/utils'
 
@@ -18,6 +20,11 @@ const riskVariant = {
 
 export function ClientsPage() {
   const { clients, loading, refetch } = useClients()
+  const { records: kycRecords } = useKycRecords()
+  const { expedientes } = useExpedientes()
+  const { alerts } = useAlerts()
+  const { operations } = usePldOperations()
+  const { notices } = useUnusualNotices()
   const [modalOpen, setModalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [riskFilter, setRiskFilter] = useState('')
@@ -104,12 +111,14 @@ export function ClientsPage() {
                 <th>Giro</th>
                 <th>Act. vuln.</th>
                 <th>Riesgo</th>
+                <th>Cumplimiento</th>
                 <th>Registro</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((client) => {
                 const risk = client.matrix_risk_level ?? client.risk_level
+                const compliance = getClientCompliance(client, kycRecords, expedientes, alerts, operations, notices)
                 return (
                   <tr key={client.id}>
                     <td>
@@ -125,6 +134,7 @@ export function ClientsPage() {
                     <td>
                       <Badge variant={riskVariant[risk]}>{RISK_LABELS[risk]}</Badge>
                     </td>
+                    <td><ComplianceDot summary={compliance} /></td>
                     <td>{formatDate(client.created_at)}</td>
                   </tr>
                 )

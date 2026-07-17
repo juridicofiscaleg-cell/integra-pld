@@ -1,19 +1,29 @@
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, FileCheck, FolderOpen, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Mail, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EditClientModal } from '../components/clients/EditClientModal'
+import { ClientEmailTemplatesModal } from '../components/clients/ClientEmailTemplatesModal'
 import { ComplianceBadge } from '../components/clients/ComplianceBadge'
 import { ClientTimeline } from '../components/clients/ClientTimeline'
+import { ClientOperationsPanel } from '../components/operations/ClientOperationsPanel'
 import { DocumentsPanel } from '../components/documents/DocumentsPanel'
 import { RiskMatrixPanel } from '../components/kyc/RiskMatrixPanel'
 import { SanctionsPanel } from '../components/kyc/SanctionsPanel'
-import { deleteClient } from '../lib/api'
+import { deleteClient, exportClientBundle } from '../lib/api'
 import { getClientCompliance } from '../lib/compliance'
 import { useAuth } from '../context/AuthContext'
-import { useAlerts, useClientActivity, useClients, useExpedientes, useKycRecords } from '../hooks/useData'
+import {
+  useAlerts,
+  useClientActivity,
+  useClients,
+  useExpedientes,
+  useKycRecords,
+  usePldOperations,
+  useUnusualNotices,
+} from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { formatDate } from '../lib/utils'
 
@@ -25,10 +35,14 @@ export function ClientDetailPage() {
   const { expedientes } = useExpedientes()
   const { records: kycRecords, refetch: refetchKyc } = useKycRecords()
   const { alerts } = useAlerts()
+  const { operations, refetch: refetchOps } = usePldOperations()
+  const { notices, refetch: refetchNotices } = useUnusualNotices()
   const { activity } = useClientActivity(id ?? '')
   const [editing, setEditing] = useState(false)
+  const [emailOpen, setEmailOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const canDelete = profile?.role !== 'asistente'
   const client = clients.find((c) => c.id === id)
@@ -46,7 +60,12 @@ export function ClientDetailPage() {
   }
 
   const risk = client.matrix_risk_level ?? client.risk_level
-  const compliance = getClientCompliance(client, clientKyc, expedientes, alerts)
+  const compliance = getClientCompliance(client, clientKyc, expedientes, alerts, operations, notices)
+
+  function refreshOps() {
+    refetchOps()
+    refetchNotices()
+  }
 
   return (
     <div className="page">
@@ -68,6 +87,16 @@ export function ClientDetailPage() {
             Riesgo {RISK_LABELS[risk]}
           </Badge>
           {client.vulnerable_activity && <Badge variant="danger">Act. vulnerable</Badge>}
+          <Button variant="secondary" onClick={() => setEmailOpen(true)}>
+            <Mail size={16} /> Correo
+          </Button>
+          <Button variant="secondary" disabled={exporting} onClick={async () => {
+            setExporting(true)
+            await exportClientBundle(client.id)
+            setExporting(false)
+          }}>
+            <Download size={16} /> Exportar expediente
+          </Button>
           <Button variant="secondary" onClick={() => setEditing(true)}>
             <Pencil size={16} /> Editar
           </Button>
@@ -102,7 +131,17 @@ export function ClientDetailPage() {
         </section>
 
         <section className="card">
-          <h2><FolderOpen size={18} /> Expedientes ({clientExpedientes.length})</h2>
+          <h2>Operaciones y avisos PLD</h2>
+          <ClientOperationsPanel
+            clientId={client.id}
+            operations={operations}
+            notices={notices}
+            onRefresh={refreshOps}
+          />
+        </section>
+
+        <section className="card">
+          <h2>Expedientes ({clientExpedientes.length})</h2>
           {clientExpedientes.length === 0 ? (
             <p className="empty-state">Sin expedientes</p>
           ) : (
@@ -118,13 +157,13 @@ export function ClientDetailPage() {
         </section>
 
         <section className="card">
-          <h2><FileCheck size={18} /> KYC ({clientKyc.length})</h2>
+          <h2>KYC ({clientKyc.length})</h2>
           {clientKyc.length === 0 ? (
             <p className="empty-state">Sin registros KYC</p>
           ) : (
             <div className="mini-list">
               {clientKyc.map((kyc) => (
-                <Link key={kyc.id} to="/kyc" className="mini-list-item">
+                <Link key={kyc.id} to={`/kyc?kyc=${kyc.id}`} className="mini-list-item">
                   <strong>{kyc.checklist_completion ?? kyc.risk_score}% docs</strong>
                   <Badge variant={kyc.status === 'aprobado' ? 'success' : 'warning'}>{kyc.status}</Badge>
                 </Link>
@@ -144,16 +183,19 @@ export function ClientDetailPage() {
             kycList={clientKyc}
             activity={activity}
             alerts={clientAlerts}
+            operations={operations.filter((o) => o.client_id === client.id)}
+            notices={notices.filter((n) => n.client_id === client.id)}
           />
         </section>
 
         <section className="card full-width">
           <h2>Documentos del cliente</h2>
-          <DocumentsPanel clientId={client.id} />
+          <DocumentsPanel clientId={client.id} kycId={latestKyc?.id} />
         </section>
       </div>
 
       <EditClientModal client={editing ? client : null} onClose={() => setEditing(false)} onUpdated={refetch} />
+      <ClientEmailTemplatesModal open={emailOpen} onClose={() => setEmailOpen(false)} client={client} />
       <ConfirmDialog
         open={deleteOpen}
         title="Eliminar cliente"

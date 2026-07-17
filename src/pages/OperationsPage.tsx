@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { FilterBar } from '../components/ui/FilterBar'
@@ -9,6 +9,9 @@ import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { createPldOperation, createUnusualNotice, deletePldOperation } from '../lib/api'
+import { classifyOperation, getThresholdForActivity } from '../lib/sat-thresholds'
+import { EditNoticeModal } from '../components/operations/EditNoticeModal'
+import { EditOperationModal } from '../components/operations/EditOperationModal'
 import { useAuth } from '../context/AuthContext'
 import {
   useClients,
@@ -38,6 +41,8 @@ export function OperationsPage() {
   const [opModal, setOpModal] = useState(false)
   const [noticeModal, setNoticeModal] = useState(false)
   const [deleteOpId, setDeleteOpId] = useState<string | null>(null)
+  const [editOp, setEditOp] = useState<(typeof operations)[0] | null>(null)
+  const [editNotice, setEditNotice] = useState<(typeof notices)[0] | null>(null)
 
   const canDelete = profile?.role !== 'asistente'
 
@@ -131,6 +136,7 @@ export function OperationsPage() {
                     <td>{op.unusual ? <Badge variant="danger">Sí</Badge> : '—'}</td>
                     <td>{op.reported ? <Badge variant="success">Sí</Badge> : '—'}</td>
                     <td>
+                      <button type="button" className="icon-btn" onClick={() => setEditOp(op)} title="Editar"><Pencil size={14} /></button>
                       {canDelete && (
                         <button type="button" className="icon-btn danger" onClick={() => setDeleteOpId(op.id)}>
                           <Trash2 size={14} />
@@ -161,6 +167,7 @@ export function OperationsPage() {
                 <Link to={`/clientes/${n.client_id}`}>{n.clients?.name}</Link>
                 <span> · Detectado {formatDate(n.detected_at)}</span>
               </div>
+              <Button variant="secondary" onClick={() => setEditNotice(n)}><Pencil size={14} /> Editar</Button>
             </div>
           ))}
         </div>
@@ -171,8 +178,9 @@ export function OperationsPage() {
         clients={clients}
         expedientes={expedientes}
         onClose={() => setOpModal(false)}
-        onCreated={() => { setOpModal(false); refetchOps() }}
+        onCreated={() => { setOpModal(false); refetchOps(); refetchNotices() }}
         userId={user?.id}
+        refetchNotices={refetchNotices}
       />
 
       <NoticeModal
@@ -197,6 +205,9 @@ export function OperationsPage() {
         }}
         onCancel={() => setDeleteOpId(null)}
       />
+
+      <EditOperationModal operation={editOp} onClose={() => setEditOp(null)} onUpdated={() => { setEditOp(null); refetchOps() }} />
+      <EditNoticeModal notice={editNotice} onClose={() => setEditNotice(null)} onUpdated={() => { setEditNotice(null); refetchNotices() }} />
     </div>
   )
 }
@@ -208,6 +219,7 @@ function OperationModal({
   onClose,
   onCreated,
   userId,
+  refetchNotices,
 }: {
   open: boolean
   clients: ReturnType<typeof useClients>['clients']
@@ -215,6 +227,7 @@ function OperationModal({
   onClose: () => void
   onCreated: () => void
   userId?: string
+  refetchNotices?: () => void
 }) {
   const [clientId, setClientId] = useState('')
   const [expedienteId, setExpedienteId] = useState('')
@@ -223,25 +236,38 @@ function OperationModal({
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [unusual, setUnusual] = useState(false)
+  const [autoNotice, setAutoNotice] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  const selectedClient = clients.find((c) => c.id === clientId)
+  const thresholdHint = selectedClient ? getThresholdForActivity(selectedClient.industry) : null
+  const classification = classifyOperation(amount ? Number(amount) : undefined, selectedClient?.industry)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!clientId) return
     setSaving(true)
+    const amt = amount ? Number(amount) : undefined
+    const shouldUnusual = unusual || !!classification.noticeType
     const result = await createPldOperation({
       client_id: clientId,
       expediente_id: expedienteId || undefined,
       operation_date: operationDate,
       operation_type: operationType,
-      amount: amount ? Number(amount) : undefined,
+      amount: amt,
       description,
-      unusual,
+      unusual: shouldUnusual,
+      auto_create_notice: shouldUnusual && autoNotice,
+      notice_type: classification.noticeType ?? 'inusual',
+      client_industry: selectedClient?.industry,
     }, userId)
     setSaving(false)
     if (result.error) setError(result.error)
-    else onCreated()
+    else {
+      if (result.noticeId) refetchNotices?.()
+      onCreated()
+    }
   }
 
   return (
@@ -262,11 +288,23 @@ function OperationModal({
           {OPERATION_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </Select>
         <Input label="Monto (MXN)" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        {thresholdHint && (
+          <p className="card-desc">
+            Umbrales orientativos ({thresholdHint.activity}): inusual ${thresholdHint.unusualAmount.toLocaleString('es-MX')} · relevante ${thresholdHint.relevantAmount.toLocaleString('es-MX')}
+          </p>
+        )}
+        {amount && <p className={`form-success ${classification.noticeType ? '' : 'muted'}`}>{classification.label}</p>}
         <Input label="Descripción" value={description} onChange={(e) => setDescription(e.target.value)} />
         <label className="checkbox-row">
           <input type="checkbox" checked={unusual} onChange={(e) => setUnusual(e.target.checked)} />
           Marcar como operación inusual
         </label>
+        {(unusual || classification.noticeType) && (
+          <label className="checkbox-row">
+            <input type="checkbox" checked={autoNotice} onChange={(e) => setAutoNotice(e.target.checked)} />
+            Crear aviso PLD automáticamente (Art. 21)
+          </label>
+        )}
         {error && <p className="form-error">{error}</p>}
         <div className="form-actions">
           <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>

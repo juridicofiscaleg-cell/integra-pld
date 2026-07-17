@@ -5,7 +5,9 @@ import type {
   Expediente,
   ExpedienteStage,
   KycRecord,
+  PldOperation,
   Profile,
+  UnusualNotice,
 } from './types'
 
 const now = new Date().toISOString()
@@ -167,6 +169,59 @@ export const DEMO_KYC: KycRecord[] = [
     pep: false,
     sanctions_check: true,
     expires_at: '2027-01-15',
+    created_at: now,
+    updated_at: now,
+    clients: DEMO_CLIENTS[0],
+  },
+]
+
+export const DEMO_OPERATIONS: PldOperation[] = [
+  {
+    id: 'op-1',
+    client_id: 'client-1',
+    expediente_id: 'exp-1',
+    operation_date: '2026-07-10',
+    operation_type: 'compra_venta_inmueble',
+    amount: 8500000,
+    currency: 'MXN',
+    description: 'Compraventa de inmueble comercial — zona industrial',
+    unusual: true,
+    reported: false,
+    created_by: 'demo-user-1',
+    created_at: now,
+    updated_at: now,
+    clients: DEMO_CLIENTS[0],
+  },
+  {
+    id: 'op-2',
+    client_id: 'client-2',
+    operation_date: '2026-06-15',
+    operation_type: 'desarrollo_inmobiliario',
+    amount: 1200000,
+    currency: 'MXN',
+    description: 'Anticipo desarrollo habitacional',
+    unusual: false,
+    reported: false,
+    created_by: 'demo-user-1',
+    created_at: now,
+    updated_at: now,
+    clients: DEMO_CLIENTS[1],
+  },
+]
+
+export const DEMO_NOTICES: UnusualNotice[] = [
+  {
+    id: 'notice-1',
+    client_id: 'client-1',
+    operation_id: 'op-1',
+    notice_type: '24h',
+    status: 'borrador',
+    title: 'Operación inusual — compraventa inmueble',
+    narrative: 'Operación por monto superior al umbral de actividad vulnerable. Cliente con riesgo alto.',
+    amount: 8500000,
+    detected_at: '2026-07-10',
+    created_by: 'demo-user-1',
+    assigned_to: 'demo-user-1',
     created_at: now,
     updated_at: now,
     clients: DEMO_CLIENTS[0],

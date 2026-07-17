@@ -4,6 +4,7 @@ import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
 import { updateClient } from '../../lib/api'
+import { validateCurp, validateRfc } from '../../lib/mexico-validators'
 import { useAuth } from '../../context/AuthContext'
 import type { Client, ClientType, RiskLevel } from '../../lib/types'
 import { RISK_LABELS, VULNERABLE_ACTIVITIES } from '../../lib/types'
@@ -41,6 +42,10 @@ export function EditClientModal({ client, onClose, onUpdated }: EditClientModalP
       setError('El nombre es obligatorio.')
       return
     }
+    const rfcErr = validateRfc(rfc, clientType)
+    if (rfcErr) { setError(rfcErr); return }
+    const curpErr = validateCurp(curp)
+    if (curpErr) { setError(curpErr); return }
 
     setSubmitting(true)
     setError('')

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Pencil, Plus, Shield, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -28,6 +28,9 @@ function checklistProgress(checklist: KycChecklist): number {
 }
 
 export function KycPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const highlightId = searchParams.get('kyc')
+  const highlightRef = useRef<HTMLDivElement>(null)
   const { user, profile } = useAuth()
   const { records, loading, refetch } = useKycRecords()
   const { clients } = useClients()
@@ -52,6 +55,21 @@ export function KycPage() {
       return true
     })
   }, [records, search, statusFilter, pepFilter])
+
+  useEffect(() => {
+    if (!highlightId || loading) return
+    const target = records.find((k) => k.id === highlightId)
+    if (!target) return
+    highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const timer = window.setTimeout(() => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('kyc')
+        return next
+      }, { replace: true })
+    }, 4000)
+    return () => window.clearTimeout(timer)
+  }, [highlightId, loading, records, setSearchParams])
 
   return (
     <div className="page">
@@ -101,7 +119,11 @@ export function KycPage() {
           {filtered.map((kyc) => {
             const progress = kyc.checklist_completion ?? checklistProgress(kyc.checklist)
             return (
-              <div key={kyc.id} className="kyc-card">
+              <div
+                key={kyc.id}
+                ref={kyc.id === highlightId ? highlightRef : undefined}
+                className={`kyc-card${kyc.id === highlightId ? ' kyc-card-highlighted' : ''}`}
+              >
                 <div className="kyc-card-header">
                   <Shield size={20} />
                   <div>

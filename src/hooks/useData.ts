@@ -7,6 +7,9 @@ import {
   DEMO_CLIENTS,
   DEMO_EXPEDIENTES,
   DEMO_KYC,
+  DEMO_NOTICES,
+  DEMO_OPERATIONS,
+  DEMO_PROFILE,
   DEMO_STAGES,
 } from '../lib/demo-data'
 import type {
@@ -317,7 +320,7 @@ export function useProfiles() {
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      setProfiles([])
+      setProfiles([DEMO_PROFILE])
       setLoading(false)
       return
     }
@@ -366,7 +369,7 @@ export function usePldOperations() {
 
   async function fetchOps() {
     if (!isSupabaseConfigured) {
-      setOperations([])
+      setOperations(DEMO_OPERATIONS)
       setLoading(false)
       return
     }
@@ -392,7 +395,7 @@ export function useUnusualNotices() {
 
   async function fetchNotices() {
     if (!isSupabaseConfigured) {
-      setNotices([])
+      setNotices(DEMO_NOTICES)
       setLoading(false)
       return
     }
@@ -410,4 +413,95 @@ export function useUnusualNotices() {
   }, [])
 
   return { notices, loading, refetch: fetchNotices }
+}
+
+export function usePldOperationsByClient(clientId: string) {
+  const { operations, loading, refetch } = usePldOperations()
+  return {
+    operations: operations.filter((o) => o.client_id === clientId),
+    loading,
+    refetch,
+  }
+}
+
+export function useUnusualNoticesByClient(clientId: string) {
+  const { notices, loading, refetch } = useUnusualNotices()
+  return {
+    notices: notices.filter((n) => n.client_id === clientId),
+    loading,
+    refetch,
+  }
+}
+
+export function useExpedienteComments(expedienteId: string) {
+  const [comments, setComments] = useState<import('../lib/types').ExpedienteComment[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function fetchComments() {
+    if (!expedienteId || !isSupabaseConfigured) {
+      setComments([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data } = await supabase!
+      .from('expediente_comments')
+      .select('*, profiles(*)')
+      .eq('expediente_id', expedienteId)
+      .order('created_at', { ascending: false })
+    setComments(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchComments()
+  }, [expedienteId])
+
+  return { comments, loading, refetch: fetchComments }
+}
+
+export function useTrainingSessions() {
+  const [sessions, setSessions] = useState<import('../lib/types').TrainingSession[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function fetchSessions() {
+    if (!isSupabaseConfigured) {
+      setSessions([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data } = await supabase!.from('training_sessions').select('*').order('session_date', { ascending: false })
+    setSessions(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchSessions()
+  }, [])
+
+  return { sessions, loading, refetch: fetchSessions }
+}
+
+export function useComplianceManuals() {
+  const [manuals, setManuals] = useState<import('../lib/types').ComplianceManual[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function fetchManuals() {
+    if (!isSupabaseConfigured) {
+      setManuals([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data } = await supabase!.from('compliance_manuals').select('*').order('effective_date', { ascending: false })
+    setManuals(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchManuals()
+  }, [])
+
+  return { manuals, loading, refetch: fetchManuals }
 }

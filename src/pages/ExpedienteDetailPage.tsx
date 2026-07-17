@@ -8,6 +8,8 @@ import { Timeline } from '../components/timeline/Timeline'
 import { StageNotesModal } from '../components/timeline/StageNotesModal'
 import { DocumentsPanel } from '../components/documents/DocumentsPanel'
 import { ClientUpdateEmailModal } from '../components/expedientes/ClientUpdateEmailModal'
+import { DiagnosisPanel } from '../components/expedientes/DiagnosisPanel'
+import { ExpedienteComments } from '../components/expedientes/ExpedienteComments'
 import { EditExpedienteModal } from '../components/expedientes/EditExpedienteModal'
 import { useExpediente, useProfiles } from '../hooks/useData'
 import { advanceStage, deleteExpediente, revertStage, updateStageNotes } from '../lib/api'
@@ -151,6 +153,18 @@ export function ExpedienteDetailPage() {
             )}
           </dl>
         </section>
+
+        <section className="card">
+          <h2>Comentarios internos</h2>
+          <ExpedienteComments expedienteId={expediente.id} />
+        </section>
+
+        {(expediente.matter_type === 'diagnostico_pld' || expediente.matter_type === 'pld') && (
+          <section className="card card-wide">
+            <h2>Diagnóstico PLD — Gap analysis</h2>
+            <DiagnosisPanel expediente={expediente} onUpdated={refetch} />
+          </section>
+        )}
 
         <section className="card">
           <h2>Documentos</h2>

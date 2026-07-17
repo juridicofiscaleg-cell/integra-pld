@@ -16,10 +16,12 @@ import type {
   RiskLevel,
   SanctionsResults,
 } from './types'
+import { buildNoticeNarrative } from './sat-thresholds'
+import { kycExpiryForRisk } from './kyc-periodicity'
 import { calcMatrixRiskLevel, type RiskMatrixFactors } from './risk-matrix'
 import { KYC_CHECKLIST_ITEMS } from './types'
 import { getWorkflowStages } from './workflows'
-import { addYears, format, parseISO, differenceInDays } from 'date-fns'
+import { format, parseISO, differenceInDays } from 'date-fns'
 
 function calcChecklistCompletion(checklist: KycChecklist): number {
   const total = KYC_CHECKLIST_ITEMS.length
@@ -31,8 +33,8 @@ function calcRiskScore(checklist: KycChecklist): number {
   return calcChecklistCompletion(checklist)
 }
 
-function defaultKycExpiry(): string {
-  return addYears(new Date(), 1).toISOString()
+function defaultKycExpiry(risk: RiskLevel = 'medio'): string {
+  return kycExpiryForRisk(risk)
 }
 
 export async function createClient(
@@ -221,6 +223,7 @@ export async function createKyc(
     review_notes?: string
     status?: KycStatus
     expires_at?: string
+    client_risk_level?: RiskLevel
   },
   userId?: string,
 ): Promise<{ kycId?: string; error?: string }> {
@@ -230,7 +233,7 @@ export async function createKyc(
 
   const risk_score = calcRiskScore(data.checklist)
   const checklist_completion = risk_score
-  const expires_at = data.expires_at ?? defaultKycExpiry()
+  const expires_at = data.expires_at ?? defaultKycExpiry(data.client_risk_level ?? 'medio')
 
   const { data: kyc, error } = await supabase
     .from('kyc_records')
@@ -974,6 +977,13 @@ export async function renewKyc(
   const { data: old } = await supabase.from('kyc_records').select('*').eq('id', oldKycId).single()
   if (!old) return { error: 'KYC no encontrado' }
 
+  const { data: client } = await supabase
+    .from('clients')
+    .select('risk_level, matrix_risk_level')
+    .eq('id', old.client_id)
+    .single()
+  const risk = (client?.matrix_risk_level ?? client?.risk_level ?? 'medio') as RiskLevel
+
   const emptyChecklist: KycChecklist = {}
   const { data: kyc, error } = await supabase
     .from('kyc_records')
@@ -990,7 +1000,7 @@ export async function renewKyc(
       beneficial_owners: old.beneficial_owners ?? [],
       pep_questionnaire: old.pep_questionnaire ?? {},
       renewal_of: oldKycId,
-      expires_at: defaultKycExpiry(),
+      expires_at: defaultKycExpiry(risk),
       created_by: userId ?? null,
     })
     .select('id, client_id')
@@ -1018,9 +1028,12 @@ export async function createPldOperation(
     currency?: string
     description?: string
     unusual?: boolean
+    auto_create_notice?: boolean
+    notice_type?: NoticeType
+    client_industry?: string
   },
   userId?: string,
-): Promise<{ operationId?: string; error?: string }> {
+): Promise<{ operationId?: string; noticeId?: string; error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
 
   const { data: op, error } = await supabase
@@ -1048,7 +1061,36 @@ export async function createPldOperation(
     action: 'operacion_registrada',
     description: `Registró operación: ${data.operation_type}`,
   })
-  return { operationId: op.id }
+
+  let noticeId: string | undefined
+  if (data.unusual && data.auto_create_notice) {
+    const { data: client } = await supabase.from('clients').select('name').eq('id', data.client_id).single()
+    const noticeType = data.notice_type ?? 'inusual'
+    const narrative = buildNoticeNarrative({
+      clientName: client?.name ?? 'Cliente',
+      operationType: data.operation_type,
+      amount: data.amount,
+      currency: data.currency,
+      operationDate: data.operation_date,
+      description: data.description,
+      noticeType: noticeType,
+    })
+    const noticeResult = await createUnusualNotice(
+      {
+        client_id: data.client_id,
+        operation_id: op.id,
+        notice_type: noticeType,
+        title: `Aviso ${noticeType} — ${data.operation_type}`,
+        narrative,
+        amount: data.amount,
+        detected_at: data.operation_date,
+      },
+      userId,
+    )
+    noticeId = noticeResult.noticeId
+  }
+
+  return { operationId: op.id, noticeId }
 }
 
 export async function updatePldOperation(
@@ -1157,4 +1199,154 @@ export async function updateUnusualNotice(
 export function notifyAssigneeEmail(email: string, subject: string, body: string): void {
   const url = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
   window.open(url, '_blank')
+}
+
+export async function markOperationReported(
+  operationId: string,
+  reportDate?: string,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const date = reportDate ?? new Date().toISOString().slice(0, 10)
+  const { error } = await supabase
+    .from('pld_operations')
+    .update({ reported: true, report_date: date, updated_at: new Date().toISOString() })
+    .eq('id', operationId)
+  if (error) return { error: error.message }
+  await supabase.from('activity_log').insert({
+    user_id: userId ?? null,
+    action: 'operacion_reportada',
+    description: `Marcó operación como reportada (${date})`,
+  })
+  return {}
+}
+
+export async function saveExpedienteDiagnosis(
+  expedienteId: string,
+  checklist: import('./types').DiagnosisItemRef[],
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase
+    .from('expedientes')
+    .update({ diagnosis_checklist: checklist, updated_at: new Date().toISOString() })
+    .eq('id', expedienteId)
+  if (error) return { error: error.message }
+  await supabase.from('activity_log').insert({
+    expediente_id: expedienteId,
+    user_id: userId ?? null,
+    action: 'diagnostico_actualizado',
+    description: 'Actualizó checklist de diagnóstico PLD',
+  })
+  return {}
+}
+
+export async function addExpedienteComment(
+  expedienteId: string,
+  body: string,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('expediente_comments').insert({
+    expediente_id: expedienteId,
+    user_id: userId ?? null,
+    body: body.trim(),
+  })
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function deleteExpedienteComment(commentId: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('expediente_comments').delete().eq('id', commentId)
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function getComplianceOfficer(): Promise<{ officer?: import('./types').ComplianceOfficer; error?: string }> {
+  if (!supabase) return { officer: { name: '', email: '' } }
+  const { data } = await supabase.from('firm_settings').select('value').eq('key', 'compliance_officer').single()
+  return { officer: (data?.value ?? { name: '', email: '' }) as import('./types').ComplianceOfficer }
+}
+
+export async function saveComplianceOfficer(officer: import('./types').ComplianceOfficer): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase
+    .from('firm_settings')
+    .upsert({ key: 'compliance_officer', value: officer, updated_at: new Date().toISOString() })
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function createTrainingSession(
+  data: { title: string; session_date: string; topic: string; participants?: string; duration_hours?: number; notes?: string },
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('training_sessions').insert({
+    ...data,
+    participants: data.participants?.trim() || null,
+    notes: data.notes?.trim() || null,
+    created_by: userId ?? null,
+  })
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function uploadComplianceManual(
+  file: File,
+  meta: { title: string; version: string; description?: string; effective_date: string },
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `manuales/${Date.now()}_${safeName}`
+  const { error: upErr } = await supabase.storage.from('cumplimiento').upload(storagePath, file)
+  if (upErr) return { error: upErr.message }
+  await supabase.from('compliance_manuals').update({ is_active: false }).eq('is_active', true)
+  const { error } = await supabase.from('compliance_manuals').insert({
+    title: meta.title.trim(),
+    version: meta.version.trim(),
+    description: meta.description?.trim() || null,
+    storage_path: storagePath,
+    file_name: file.name,
+    effective_date: meta.effective_date,
+    is_active: true,
+    uploaded_by: userId ?? null,
+  })
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function getComplianceManualUrl(storagePath: string): Promise<string | null> {
+  if (!supabase) return null
+  const { data } = await supabase.storage.from('cumplimiento').createSignedUrl(storagePath, 3600)
+  return data?.signedUrl ?? null
+}
+
+export async function exportClientBundle(clientId: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const [client, kyc, docs, ops, notices] = await Promise.all([
+    supabase.from('clients').select('*').eq('id', clientId).single(),
+    supabase.from('kyc_records').select('*').eq('client_id', clientId),
+    supabase.from('documents').select('*').eq('client_id', clientId),
+    supabase.from('pld_operations').select('*').eq('client_id', clientId),
+    supabase.from('unusual_notices').select('*').eq('client_id', clientId),
+  ])
+  const bundle = {
+    exported_at: new Date().toISOString(),
+    client: client.data,
+    kyc: kyc.data,
+    documents: docs.data,
+    operations: ops.data,
+    notices: notices.data,
+  }
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `expediente-pld-${client.data?.name?.replace(/\s+/g, '_') ?? clientId}-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  return {}
 }

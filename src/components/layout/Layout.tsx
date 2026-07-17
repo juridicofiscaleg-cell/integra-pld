@@ -13,6 +13,7 @@ import {
   Scale,
   Search,
   Settings,
+  Shield,
   Users,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -23,11 +24,12 @@ const navItems = [
   { to: '/clientes', icon: Users, label: 'Clientes' },
   { to: '/expedientes', icon: FolderOpen, label: 'Expedientes' },
   { to: '/kyc', icon: FileCheck, label: 'KYC' },
-  { to: '/operaciones', icon: Scale, label: 'Operaciones' },
+  { to: '/cumplimiento', icon: Scale, label: 'Manual PLD' },
+  { to: '/operaciones', icon: ClipboardList, label: 'Operaciones' },
   { to: '/calendario', icon: Calendar, label: 'Calendario' },
   { to: '/biblioteca', icon: BookOpen, label: 'Biblioteca' },
   { to: '/alertas', icon: AlertTriangle, label: 'Alertas' },
-  { to: '/bitacora', icon: ClipboardList, label: 'Bitácora' },
+  { to: '/bitacora', icon: Shield, label: 'Bitácora' },
   { to: '/reportes', icon: FileSpreadsheet, label: 'Reportes' },
   { to: '/buscar', icon: Search, label: 'Buscar' },
 ]
