@@ -45,7 +45,7 @@ export async function executeApprovalAction(
       return api.deleteLegalResource(String(payload.resourceId), payload.storagePath as string | undefined)
 
     case 'export_client_bundle':
-      return api.exportClientBundle(String(payload.clientId))
+      return api.exportClientBundleZip(String(payload.clientId))
 
     case 'approve_kyc':
       return api.updateKycExtended(

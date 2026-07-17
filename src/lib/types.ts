@@ -271,6 +271,39 @@ export interface FirmProfile {
   name: string
   rfc?: string
   address?: string
+  email?: string
+  phone?: string
+}
+
+export interface OnboardingState {
+  completed: boolean
+  steps: {
+    firm_profile?: boolean
+    team_member?: boolean
+    first_client?: boolean
+    first_officer?: boolean
+    first_manual?: boolean
+  }
+}
+
+export interface NotificationItem {
+  id: string
+  user_id: string
+  title: string
+  body?: string
+  link?: string
+  kind: 'info' | 'success' | 'warning' | 'approval'
+  read_at?: string
+  created_at: string
+}
+
+export interface ClientPortalToken {
+  id: string
+  client_id: string
+  token: string
+  label?: string
+  expires_at: string
+  created_at: string
 }
 
 export interface ComplianceOfficer {

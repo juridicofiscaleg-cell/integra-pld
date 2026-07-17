@@ -19,6 +19,7 @@ import { CompliancePage } from './pages/CompliancePage'
 import { ApprovalsPage } from './pages/ApprovalsPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 import { PendingAccountPage, RejectedAccountPage } from './pages/PendingAccountPage'
+import { ClientPortalPage } from './pages/ClientPortalPage'
 import { isAccountPending, isAccountRejected } from './lib/permissions'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -36,6 +37,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/portal/:token" element={<ClientPortalPage />} />
       <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
       <Route path="/clientes/:id" element={<ProtectedRoute><ClientDetailPage /></ProtectedRoute>} />

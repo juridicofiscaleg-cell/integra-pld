@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { syncKycAlerts, fetchComplianceOfficers, fetchComplianceManuals } from '../lib/api'
+import { syncAllPldAlerts } from '../lib/pld-alerts-sync'
 import {
   DEMO_ACTIVITY,
   DEMO_ALERTS,
@@ -177,6 +178,7 @@ export function useAlerts() {
     }
     setLoading(true)
     await syncKycAlerts()
+    await syncAllPldAlerts()
     const { data } = await supabase!
       .from('alerts')
       .select('*, clients(*), expedientes(*)')

@@ -14,6 +14,8 @@ import {
 } from '../lib/types'
 import { formatDate, formatRelative } from '../lib/utils'
 import { useState } from 'react'
+import { ApprovalPayloadDiff } from '../components/approvals/ApprovalPayloadDiff'
+import { Select } from '../components/ui/Select'
 
 export function ApprovalsPage() {
   const { user, profile } = useAuth()
@@ -21,12 +23,16 @@ export function ApprovalsPage() {
   const { profiles } = useProfiles()
   const { requests, pending, loading, refetch } = useApprovalRequests()
   const [filter, setFilter] = useState<'pendiente' | 'all'>('pendiente')
+  const [requesterFilter, setRequesterFilter] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [messageError, setMessageError] = useState(false)
 
   const canReview = canReviewApprovals(profile?.role)
-  const shown = filter === 'pendiente' ? pending : requests
+  const baseList = filter === 'pendiente' ? pending : requests
+  const shown = requesterFilter
+    ? baseList.filter((r) => r.requested_by === requesterFilter)
+    : baseList
 
   function requesterName(req: ApprovalRequest) {
     return req.requester?.full_name
@@ -82,6 +88,14 @@ export function ApprovalsPage() {
             Historial
           </Button>
         </div>
+        {canReview && (
+          <Select label="" value={requesterFilter} onChange={(e) => setRequesterFilter(e.target.value)}>
+            <option value="">Todos los solicitantes</option>
+            {profiles.filter((p) => p.role === 'asistente').map((p) => (
+              <option key={p.id} value={p.id}>{p.full_name}</option>
+            ))}
+          </Select>
+        )}
       </header>
 
       {message && (
@@ -117,6 +131,7 @@ export function ApprovalsPage() {
                 </Badge>
               </div>
               {req.description && <p>{req.description}</p>}
+              <ApprovalPayloadDiff req={req} />
               {clientName(req) && (
                 <Link to={`/clientes/${req.client_id}`} className="cell-sub">Cliente: {clientName(req)}</Link>
               )}

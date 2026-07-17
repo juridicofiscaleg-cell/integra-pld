@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, Mail, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Link2, Mail, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
@@ -12,7 +12,7 @@ import { ClientCompliancePanel } from '../components/clients/ClientCompliancePan
 import { ClientOperationsPanel } from '../components/operations/ClientOperationsPanel'
 import { RiskMatrixPanel } from '../components/kyc/RiskMatrixPanel'
 import { SanctionsPanel } from '../components/kyc/SanctionsPanel'
-import { deleteClient, exportClientBundle } from '../lib/api'
+import { deleteClient, exportClientBundleZip, createClientPortalToken } from '../lib/api'
 import { getClientCompliance } from '../lib/compliance'
 import { useAuth } from '../context/AuthContext'
 import { useProtectedAction } from '../hooks/useProtectedAction'
@@ -102,6 +102,16 @@ export function ClientDetailPage() {
           <Button variant="secondary" onClick={() => setEmailOpen(true)}>
             <Mail size={16} /> Correo
           </Button>
+          <Button variant="secondary" onClick={async () => {
+            const r = await createClientPortalToken(client.id, 'Documentos KYC', 7, user?.id)
+            if (r.error) setActionInfo(r.error)
+            else if (r.url) {
+              await navigator.clipboard.writeText(r.url)
+              setActionInfo('Enlace portal copiado (válido 7 días). Envíalo al cliente.')
+            }
+          }}>
+            <Link2 size={16} /> Portal cliente
+          </Button>
           {canExport && (
             <Button variant="secondary" disabled={exporting} onClick={async () => {
               setExporting(true)
@@ -111,7 +121,7 @@ export function ClientDetailPage() {
                 title: `Exportar expediente PLD: ${client.name}`,
                 clientId: client.id,
                 payload: { clientId: client.id },
-                direct: () => exportClientBundle(client.id),
+                direct: () => exportClientBundleZip(client.id),
               })
               setExporting(false)
               if (result.pending) setActionInfo('Exportación solicitada — pendiente de autorización.')

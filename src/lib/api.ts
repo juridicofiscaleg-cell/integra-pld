@@ -23,6 +23,7 @@ import { KYC_CHECKLIST_ITEMS } from './types'
 import { getWorkflowStages } from './workflows'
 import { formatSupabaseMigrationError } from './supabase-errors'
 import { executeApprovalAction } from './approval-executor'
+import { notifyLawyers, createNotification, openMailto } from './notifications'
 import { format, parseISO, differenceInDays } from 'date-fns'
 
 function calcChecklistCompletion(checklist: KycChecklist): number {
@@ -452,13 +453,7 @@ export async function uploadDocument(
   return { document: doc }
 }
 
-export async function getDocumentUrl(storagePath: string): Promise<string | null> {
-  if (!supabase) return null
-  const { data } = await supabase.storage
-    .from('documentos')
-    .createSignedUrl(storagePath, 3600)
-  return data?.signedUrl ?? null
-}
+export { getDocumentUrl, getComplianceManualUrl, getLegalResourceUrl } from './storage-urls'
 
 export async function deleteDocument(docId: string, storagePath: string): Promise<{ error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
@@ -680,6 +675,15 @@ export async function approveAccountAccess(
     action: 'cuenta_aprobada',
     description: `Autorizó acceso de nuevo usuario (${profileId})`,
   })
+  await createNotification({
+    userId: profileId,
+    title: 'Acceso autorizado',
+    body: 'Tu cuenta fue activada. Ya puedes usar Integra PLD.',
+    link: '/',
+    kind: 'success',
+  })
+  const { data: prof } = await supabase.from('profiles').select('email').eq('id', profileId).maybeSingle()
+  if (prof?.email) openMailto(prof.email, 'Acceso autorizado a Integra PLD', 'Tu cuenta fue activada.')
   return {}
 }
 
@@ -1035,12 +1039,6 @@ export async function deleteLegalResource(id: string, storagePath?: string): Pro
   const { error } = await supabase.from('legal_resources').delete().eq('id', id)
   if (error) return { error: error.message }
   return {}
-}
-
-export async function getLegalResourceUrl(storagePath: string): Promise<string | null> {
-  if (!supabase) return null
-  const { data } = await supabase.storage.from('plantillas').createSignedUrl(storagePath, 3600)
-  return data?.signedUrl ?? null
 }
 
 export async function updateExpediente(
@@ -1809,12 +1807,6 @@ export async function deleteComplianceManual(id: string): Promise<{ error?: stri
   return {}
 }
 
-export async function getComplianceManualUrl(storagePath: string): Promise<string | null> {
-  if (!supabase) return null
-  const { data } = await supabase.storage.from('cumplimiento').createSignedUrl(storagePath, 3600)
-  return data?.signedUrl ?? null
-}
-
 export async function deleteUnusualNotice(noticeId: string): Promise<{ error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
   const { error } = await supabase.from('unusual_notices').delete().eq('id', noticeId)
@@ -1961,6 +1953,13 @@ export async function createApprovalRequest(
     description: `Solicitó autorización: ${row.title}`,
   })
 
+  void notifyLawyers({
+    title: `Nueva autorización: ${row.title}`,
+    body: data.description ?? 'Revisa en Autorizaciones',
+    link: '/autorizaciones',
+    kind: 'approval',
+  })
+
   return { id: created?.id }
 }
 
@@ -2044,6 +2043,22 @@ export async function reviewApprovalRequest(
     description: `${decision === 'aprobada' ? 'Aprobó' : 'Rechazó'} solicitud: ${req.title}`,
   })
 
+  if (req.requested_by) {
+    const msg =
+      decision === 'aprobada'
+        ? `Tu solicitud fue aprobada: ${req.title}`
+        : `Tu solicitud fue rechazada: ${req.title}${reviewNotes ? ` — ${reviewNotes}` : ''}`
+    await createNotification({
+      userId: req.requested_by,
+      title: decision === 'aprobada' ? 'Autorización aprobada' : 'Autorización rechazada',
+      body: msg,
+      link: '/autorizaciones',
+      kind: decision === 'aprobada' ? 'success' : 'warning',
+    })
+    const { data: requester } = await supabase.from('profiles').select('email').eq('id', req.requested_by).maybeSingle()
+    if (requester?.email) openMailto(requester.email, msg, 'Revisa Integra PLD → Autorizaciones')
+  }
+
   return {}
 }
 
@@ -2098,4 +2113,60 @@ export async function updateProfileRole(
     description: `Actualizó rol de usuario a ${role}`,
   })
   return {}
+}
+
+export { exportClientBundleZip } from './bundle-export'
+
+export async function createClientPortalToken(
+  clientId: string,
+  label: string,
+  daysValid: number,
+  userId?: string,
+): Promise<{ token?: string; url?: string; error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const expires = new Date()
+  expires.setDate(expires.getDate() + daysValid)
+  const { data, error } = await supabase
+    .from('client_portal_tokens')
+    .insert({
+      client_id: clientId,
+      label: label.trim() || 'Subida de documentos',
+      expires_at: expires.toISOString(),
+      created_by: userId ?? null,
+    })
+    .select('token')
+    .single()
+  if (error) return { error: error.message }
+  const base = `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, '')
+  return { token: data.token, url: `${base}/portal/${data.token}` }
+}
+
+export async function getPortalClient(token: string): Promise<{
+  client?: import('./types').Client
+  expired?: boolean
+  error?: string
+}> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { data: row, error } = await supabase
+    .from('client_portal_tokens')
+    .select('*, clients(*)')
+    .eq('token', token)
+    .maybeSingle()
+  if (error || !row) return { error: 'Enlace no válido' }
+  if (new Date(row.expires_at) < new Date()) return { expired: true }
+  return { client: row.clients as import('./types').Client }
+}
+
+export async function uploadViaPortal(
+  token: string,
+  file: File,
+  docType: string,
+): Promise<{ error?: string }> {
+  const portal = await getPortalClient(token)
+  if (portal.error || portal.expired || !portal.client) {
+    return { error: portal.expired ? 'Enlace expirado' : portal.error ?? 'Enlace inválido' }
+  }
+  return uploadDocument(file, { client_id: portal.client.id, doc_type: docType }).then((r) =>
+    r.error ? { error: r.error } : {},
+  )
 }

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, Calendar, FileCheck, FolderOpen, GraduationCap, Shield, ShieldCheck, Users } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
@@ -21,6 +22,10 @@ import { getClientCompliance } from '../lib/compliance'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { getProgressPercent, getWorkflowStages } from '../lib/workflows'
 import { formatDate, formatRelative } from '../lib/utils'
+import { getOnboardingState, refreshOnboardingProgress } from '../lib/onboarding'
+import { OnboardingPanel } from '../components/onboarding/OnboardingPanel'
+import { getFirmProfile } from '../lib/api'
+import type { OnboardingState } from '../lib/types'
 import { differenceInDays, differenceInHours, parseISO, subMonths } from 'date-fns'
 
 export function DashboardPage() {
@@ -37,8 +42,21 @@ export function DashboardPage() {
   const { manuals } = useComplianceManuals()
   const { sessions: trainings } = useTrainingSessions()
   const { profiles } = useProfiles()
+  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null)
 
-  const profileName = profiles.find((p) => p.id === user?.id)
+  useEffect(() => {
+    if (profile?.role === 'asistente') return
+    Promise.all([getFirmProfile(), getOnboardingState()]).then(async ([{ firm }]) => {
+      const state = await refreshOnboardingProgress({
+        hasFirm: Boolean(firm?.name?.trim()),
+        hasTeam: profiles.filter((p) => p.role === 'asistente').length > 0,
+        hasClient: clients.length > 0,
+        hasOfficer: officers.length > 0,
+        hasManual: manuals.length > 0,
+      })
+      setOnboarding(state)
+    })
+  }, [profile?.role, profiles.length, clients.length, officers.length, manuals.length])
   const myPendingApprovals = approvalRequests.filter(
     (r) => r.status === 'pendiente' && r.requested_by === user?.id,
   )
@@ -91,12 +109,16 @@ export function DashboardPage() {
       <header className="page-header">
         <div>
           <h1>Dashboard</h1>
-          <p>Vista general de tu despacho — {profileName?.full_name ?? 'Equipo'}</p>
+          <p>Vista general de tu despacho — {profile?.full_name ?? 'Equipo'}</p>
         </div>
         <Link to="/calendario" className="btn-link">
           <Calendar size={16} /> Calendario
         </Link>
       </header>
+
+      {onboarding && !onboarding.completed && profile?.role !== 'asistente' && (
+        <OnboardingPanel state={onboarding} />
+      )}
 
       <div className="stats-grid">
         {stats.map(({ label, value, icon: Icon, to }) => (

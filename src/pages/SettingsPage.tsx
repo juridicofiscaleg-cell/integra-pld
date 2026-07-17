@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useProfiles } from '../hooks/useData'
-import { updateProfileRole } from '../lib/api'
+import { updateProfileRole, getFirmProfile, saveFirmProfile } from '../lib/api'
+import { Input } from '../components/ui/Input'
+import { Button } from '../components/ui/Button'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { canManageTeam } from '../lib/permissions'
 import { MATTER_TYPE_LABELS, ROLE_LABELS, type UserRole } from '../lib/types'
@@ -14,6 +16,22 @@ export function SettingsPage() {
   const [teamSuccess, setTeamSuccess] = useState('')
   const [teamError, setTeamError] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [firmName, setFirmName] = useState('')
+  const [firmRfc, setFirmRfc] = useState('')
+  const [firmAddress, setFirmAddress] = useState('')
+  const [firmEmail, setFirmEmail] = useState('')
+  const [firmMsg, setFirmMsg] = useState('')
+
+  useEffect(() => {
+    getFirmProfile().then(({ firm }) => {
+      if (firm) {
+        setFirmName(firm.name ?? '')
+        setFirmRfc(firm.rfc ?? '')
+        setFirmAddress(firm.address ?? '')
+        setFirmEmail(firm.email ?? '')
+      }
+    })
+  }, [])
 
   const canManage = canManageTeam(profile?.role)
 
@@ -66,6 +84,22 @@ export function SettingsPage() {
           {!isSupabaseConfigured && (
             <p className="card-desc">Las autorizaciones en demo se guardan en este navegador.</p>
           )}
+        </section>
+
+        <section className="card card-wide">
+          <h2>Datos del despacho</h2>
+          <p className="card-desc">Aparecen en constancias, diplomas y documentos exportados.</p>
+          <div className="form-row">
+            <Input label="Nombre del despacho" value={firmName} onChange={(e) => setFirmName(e.target.value)} />
+            <Input label="RFC" value={firmRfc} onChange={(e) => setFirmRfc(e.target.value)} />
+          </div>
+          <Input label="Domicilio" value={firmAddress} onChange={(e) => setFirmAddress(e.target.value)} />
+          <Input label="Correo del despacho" type="email" value={firmEmail} onChange={(e) => setFirmEmail(e.target.value)} />
+          {firmMsg && <p className="form-success">{firmMsg}</p>}
+          <Button type="button" onClick={async () => {
+            const r = await saveFirmProfile({ name: firmName, rfc: firmRfc, address: firmAddress, email: firmEmail })
+            setFirmMsg(r.error ? r.error : 'Datos del despacho guardados.')
+          }}>Guardar despacho</Button>
         </section>
 
         <section className="card card-wide">

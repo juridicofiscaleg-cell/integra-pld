@@ -17,6 +17,8 @@ import {
   type NavItem,
 } from '../../lib/permissions'
 import { ROLE_LABELS } from '../../lib/types'
+import { NotificationBell } from './NotificationBell'
+import { SessionTimeout } from './SessionTimeout'
 import { cn } from '../../lib/utils'
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -55,6 +57,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell">
+      <SessionTimeout />
       <button
         type="button"
         className="mobile-menu-toggle"
@@ -97,6 +100,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             Configuración
           </Link>
           <div className="user-info">
+            <NotificationBell />
             <div className="user-avatar">{profile?.full_name?.charAt(0) ?? 'A'}</div>
             <div>
               <strong>{profile?.full_name ?? 'Usuario'}</strong>
@@ -111,6 +115,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="app-body">
+        <div className="top-bar-mobile">
+          <NotificationBell />
+        </div>
         <main className="main-content">{children}</main>
 
         <nav className="bottom-nav" aria-label="Navegación principal">

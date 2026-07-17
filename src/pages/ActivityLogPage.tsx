@@ -8,6 +8,7 @@ import { exportActivityCsv } from '../lib/export'
 import { canViewAuditLog } from '../lib/permissions'
 import { useAuth } from '../context/AuthContext'
 import { formatDateTime, formatRelative } from '../lib/utils'
+import { formatActivityDiff } from '../lib/activity-log-helper'
 
 export function ActivityLogPage() {
   const { profile } = useAuth()
@@ -85,7 +86,16 @@ export function ActivityLogPage() {
                 <tr key={a.id}>
                   <td title={formatDateTime(a.created_at)}>{formatRelative(a.created_at)}</td>
                   <td><code>{a.action}</code></td>
-                  <td>{a.description}</td>
+                  <td>
+                    {a.description}
+                    {formatActivityDiff(a.metadata).length > 0 && (
+                      <ul className="activity-diff">
+                        {formatActivityDiff(a.metadata).map((line) => (
+                          <li key={line}><code>{line}</code></li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
                   <td>{a.profiles?.full_name ?? '—'}</td>
                   <td>
                     {a.client_id ? (
