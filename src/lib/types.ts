@@ -99,6 +99,7 @@ export interface ExpedienteComment {
 
 export interface ComplianceManual {
   id: string
+  client_id?: string
   title: string
   version: string
   description?: string
@@ -109,6 +110,7 @@ export interface ComplianceManual {
   uploaded_by?: string
   created_at: string
   updated_at: string
+  clients?: Client
 }
 
 export interface TrainingSession {

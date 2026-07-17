@@ -21,6 +21,7 @@ import { kycExpiryForRisk } from './kyc-periodicity'
 import { calcMatrixRiskLevel, type RiskMatrixFactors } from './risk-matrix'
 import { KYC_CHECKLIST_ITEMS } from './types'
 import { getWorkflowStages } from './workflows'
+import { formatSupabaseMigrationError } from './supabase-errors'
 import { format, parseISO, differenceInDays } from 'date-fns'
 
 function calcChecklistCompletion(checklist: KycChecklist): number {
@@ -1277,12 +1278,7 @@ export async function fetchComplianceOfficers(): Promise<{ officers: import('./t
     .from('client_compliance_officers')
     .select('*, clients(*)')
     .order('updated_at', { ascending: false })
-  if (error) {
-    const hint = error.message.includes('client_compliance_officers') || error.code === '42P01'
-      ? ' Ejecuta supabase/migration-v5c.sql en Supabase.'
-      : ''
-    return { officers: [], error: error.message + hint }
-  }
+  if (error) return { officers: [], error: formatSupabaseMigrationError(error.message) }
   return { officers: data ?? [] }
 }
 
@@ -1325,7 +1321,7 @@ export async function createComplianceOfficer(
     })
     .select('id')
     .single()
-  if (error) return { error: error.message }
+  if (error) return { error: formatSupabaseMigrationError(error.message) }
   return { id: row?.id }
 }
 
@@ -1358,14 +1354,14 @@ export async function updateComplianceOfficer(
     .from('client_compliance_officers')
     .update({ ...data, updated_at: new Date().toISOString() })
     .eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: formatSupabaseMigrationError(error.message) }
   return {}
 }
 
 export async function deleteComplianceOfficer(id: string): Promise<{ error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
   const { error } = await supabase.from('client_compliance_officers').delete().eq('id', id)
-  if (error) return { error: error.message }
+  if (error) return { error: formatSupabaseMigrationError(error.message) }
   return {}
 }
 
@@ -1488,18 +1484,34 @@ export async function saveTrainingCertificate(
   return {}
 }
 
+export async function fetchComplianceManuals(): Promise<{ manuals: import('./types').ComplianceManual[]; error?: string }> {
+  if (!supabase) return { manuals: [] }
+  const { data, error } = await supabase
+    .from('compliance_manuals')
+    .select('*, clients(*)')
+    .order('effective_date', { ascending: false })
+  if (error) return { manuals: [], error: formatSupabaseMigrationError(error.message) }
+  return { manuals: data ?? [] }
+}
+
 export async function uploadComplianceManual(
   file: File,
-  meta: { title: string; version: string; description?: string; effective_date: string },
+  meta: { client_id: string; title: string; version: string; description?: string; effective_date: string },
   userId?: string,
 ): Promise<{ error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
+  if (!meta.client_id) return { error: 'Selecciona el cliente al que pertenece el manual.' }
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const storagePath = `manuales/${Date.now()}_${safeName}`
+  const storagePath = `manuales/${meta.client_id}/${Date.now()}_${safeName}`
   const { error: upErr } = await supabase.storage.from('cumplimiento').upload(storagePath, file)
   if (upErr) return { error: upErr.message }
-  await supabase.from('compliance_manuals').update({ is_active: false }).eq('is_active', true)
+  await supabase
+    .from('compliance_manuals')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('client_id', meta.client_id)
+    .eq('is_active', true)
   const { error } = await supabase.from('compliance_manuals').insert({
+    client_id: meta.client_id,
     title: meta.title.trim(),
     version: meta.version.trim(),
     description: meta.description?.trim() || null,
@@ -1509,7 +1521,14 @@ export async function uploadComplianceManual(
     is_active: true,
     uploaded_by: userId ?? null,
   })
-  if (error) return { error: error.message }
+  if (error) return { error: formatSupabaseMigrationError(error.message) }
+  return {}
+}
+
+export async function deleteComplianceManual(id: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('compliance_manuals').delete().eq('id', id)
+  if (error) return { error: formatSupabaseMigrationError(error.message) }
   return {}
 }
 

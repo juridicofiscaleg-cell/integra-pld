@@ -24,7 +24,7 @@ const navItems = [
   { to: '/clientes', icon: Users, label: 'Clientes' },
   { to: '/expedientes', icon: FolderOpen, label: 'Expedientes' },
   { to: '/kyc', icon: FileCheck, label: 'KYC' },
-  { to: '/cumplimiento', icon: Scale, label: 'Manual PLD' },
+  { to: '/cumplimiento', icon: Scale, label: 'Oficiales de Cumplimiento' },
   { to: '/operaciones', icon: ClipboardList, label: 'Operaciones' },
   { to: '/calendario', icon: Calendar, label: 'Calendario' },
   { to: '/biblioteca', icon: BookOpen, label: 'Biblioteca' },

@@ -3,6 +3,7 @@ import type {
   Alert,
   Client,
   ClientComplianceOfficer,
+  ComplianceManual,
   Expediente,
   ExpedienteStage,
   KycRecord,
@@ -224,6 +225,21 @@ export const DEMO_NOTICES: UnusualNotice[] = [
     detected_at: '2026-07-10',
     created_by: 'demo-user-1',
     assigned_to: 'demo-user-1',
+    created_at: now,
+    updated_at: now,
+    clients: DEMO_CLIENTS[0],
+  },
+]
+
+export const DEMO_MANUALS: ComplianceManual[] = [
+  {
+    id: 'manual-1',
+    client_id: 'client-1',
+    title: 'Manual PLD/FT',
+    version: '2.1',
+    file_name: 'manual-pld-gfn-2026.pdf',
+    effective_date: '2026-01-01',
+    is_active: true,
     created_at: now,
     updated_at: now,
     clients: DEMO_CLIENTS[0],

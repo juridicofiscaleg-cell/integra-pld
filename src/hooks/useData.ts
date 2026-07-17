@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { syncKycAlerts, fetchComplianceOfficers } from '../lib/api'
+import { syncKycAlerts, fetchComplianceOfficers, fetchComplianceManuals } from '../lib/api'
 import {
   DEMO_ACTIVITY,
   DEMO_ALERTS,
@@ -8,6 +8,7 @@ import {
   DEMO_EXPEDIENTES,
   DEMO_KYC,
   DEMO_NOTICES,
+  DEMO_MANUALS,
   DEMO_OFFICERS,
   DEMO_OPERATIONS,
   DEMO_PROFILE,
@@ -520,22 +521,26 @@ export function useTrainingSessions() {
 export function useComplianceManuals() {
   const [manuals, setManuals] = useState<import('../lib/types').ComplianceManual[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>()
 
   async function fetchManuals() {
     if (!isSupabaseConfigured) {
-      setManuals([])
+      setManuals(DEMO_MANUALS)
       setLoading(false)
-      return
+      setError(undefined)
+      return DEMO_MANUALS
     }
     setLoading(true)
-    const { data } = await supabase!.from('compliance_manuals').select('*').order('effective_date', { ascending: false })
-    setManuals(data ?? [])
+    const { manuals: data, error: err } = await fetchComplianceManuals()
+    setError(err)
+    setManuals(data)
     setLoading(false)
+    return data
   }
 
   useEffect(() => {
     fetchManuals()
   }, [])
 
-  return { manuals, loading, refetch: fetchManuals }
+  return { manuals, loading, error, refetch: fetchManuals }
 }
