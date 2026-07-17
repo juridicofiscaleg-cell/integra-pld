@@ -15,6 +15,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error?: string; success?: string }>
   resendConfirmation: (email: string) => Promise<{ error?: string; success?: string }>
   signOut: () => Promise<void>
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -53,6 +54,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe()
   }, [isDemo])
+
+  useEffect(() => {
+    if (isDemo || !user?.id) return
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') loadProfile(user!.id)
+    }
+
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [isDemo, user?.id])
 
   async function loadProfile(userId: string) {
     if (!supabase) return
@@ -93,6 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setProfile(null)
     setLoading(false)
+  }
+
+  async function refreshProfile() {
+    if (isDemo || !user?.id) return
+    await loadProfile(user.id)
   }
 
   async function signIn(email: string, password: string) {
@@ -180,7 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, session, loading, isDemo, signIn, signUp, resendConfirmation, signOut }}>
+    <AuthContext.Provider value={{ user, profile, session, loading, isDemo, signIn, signUp, resendConfirmation, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

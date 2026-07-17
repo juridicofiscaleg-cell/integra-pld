@@ -11,19 +11,21 @@ import { Select } from '../components/ui/Select'
 export function SettingsPage() {
   const { profile, user } = useAuth()
   const { profiles, loading, refetch } = useProfiles()
-  const [teamMessage, setTeamMessage] = useState('')
+  const [teamSuccess, setTeamSuccess] = useState('')
+  const [teamError, setTeamError] = useState('')
   const [savingId, setSavingId] = useState<string | null>(null)
 
   const canManage = canManageTeam(profile?.role)
 
   async function handleRoleChange(memberId: string, role: UserRole) {
     setSavingId(memberId)
-    setTeamMessage('')
+    setTeamSuccess('')
+    setTeamError('')
     const result = await updateProfileRole(memberId, role, user?.id)
     setSavingId(null)
-    if (result.error) setTeamMessage(result.error)
+    if (result.error) setTeamError(result.error)
     else {
-      setTeamMessage('Rol actualizado.')
+      setTeamSuccess('Rol actualizado. La otra persona debe recargar la página para ver los cambios.')
       refetch()
     }
   }
@@ -73,11 +75,13 @@ export function SettingsPage() {
           ) : profiles.length === 0 ? (
             <p className="card-desc">
               Cada miembro crea su cuenta con el mismo proyecto Supabase.
-              Asigna rol <strong>asistente</strong> a tu auxiliar desde aquí (requiere migración de autorizaciones).
+              Asigna rol <strong>asistente</strong> a tu auxiliar desde aquí. Si no guarda, ejecuta{' '}
+              <code>supabase/migration-fix-team-roles.sql</code> en Supabase.
             </p>
           ) : (
             <>
-              {teamMessage && <p className="form-success">{teamMessage}</p>}
+              {teamError && <p className="form-error">{teamError}</p>}
+              {teamSuccess && <p className="form-success">{teamSuccess}</p>}
               <div className="team-list">
                 {profiles.map((p) => (
                   <div key={p.id} className="team-row">
@@ -118,9 +122,9 @@ export function SettingsPage() {
             <dt>Asistente</dt>
             <dd>Ver, crear, editar, subir docs. Eliminar/aprobar/exportar → solicita autorización.</dd>
             <dt>Abogado</dt>
-            <dd>Acceso completo + revisar autorizaciones + reportes y bitácora.</dd>
+            <dd>Acceso completo + revisar autorizaciones + cambiar roles del equipo.</dd>
             <dt>Admin</dt>
-            <dd>Igual que abogado + gestión de roles del equipo.</dd>
+            <dd>Igual que abogado (rol reservado para futuras funciones).</dd>
           </dl>
         </section>
 

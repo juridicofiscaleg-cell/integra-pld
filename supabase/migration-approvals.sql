@@ -42,9 +42,58 @@ create policy "Abogado admin revisa autorizaciones" on approval_requests
 -- Permitir a admin/abogado cambiar rol de otros miembros del equipo
 drop policy if exists "Admin abogado edita roles equipo" on profiles;
 create policy "Admin abogado edita roles equipo" on profiles
-  for update to authenticated using (
+  for update to authenticated
+  using (
+    exists (
+      select 1 from profiles p
+      where p.id = auth.uid() and p.role in ('admin', 'abogado')
+    )
+  )
+  with check (
     exists (
       select 1 from profiles p
       where p.id = auth.uid() and p.role in ('admin', 'abogado')
     )
   );
+
+-- RPC para cambio de roles (ver migration-fix-team-roles.sql si falla)
+create or replace function public.update_team_member_role(target_id uuid, new_role text)
+returns profiles
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  result profiles;
+begin
+  if auth.uid() is null then
+    raise exception 'No autenticado';
+  end if;
+
+  if not exists (
+    select 1 from profiles where id = auth.uid() and role in ('admin', 'abogado')
+  ) then
+    raise exception 'Solo abogado o admin puede cambiar roles';
+  end if;
+
+  if new_role not in ('admin', 'abogado', 'asistente') then
+    raise exception 'Rol inválido: %', new_role;
+  end if;
+
+  if target_id = auth.uid() then
+    raise exception 'No puedes cambiar tu propio rol desde aquí';
+  end if;
+
+  update profiles set role = new_role where id = target_id
+  returning * into result;
+
+  if result.id is null then
+    raise exception 'Usuario no encontrado';
+  end if;
+
+  return result;
+end;
+$$;
+
+revoke all on function public.update_team_member_role(uuid, text) from public;
+grant execute on function public.update_team_member_role(uuid, text) to authenticated;

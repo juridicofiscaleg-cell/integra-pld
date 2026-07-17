@@ -1792,8 +1792,45 @@ export async function updateProfileRole(
   userId?: string,
 ): Promise<{ error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
-  const { error } = await supabase.from('profiles').update({ role }).eq('id', profileId)
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc('update_team_member_role', {
+    target_id: profileId,
+    new_role: role,
+  })
+
+  if (!rpcError && rpcData) {
+    await supabase.from('activity_log').insert({
+      user_id: userId ?? null,
+      action: 'rol_actualizado',
+      description: `Actualizó rol de usuario a ${role}`,
+    })
+    return {}
+  }
+
+  // Fallback si la RPC aún no está desplegada (migration-fix-team-roles.sql)
+  const rpcMissing =
+    rpcError?.message?.includes('update_team_member_role') ||
+    rpcError?.code === 'PGRST202'
+
+  if (!rpcMissing) {
+    return { error: rpcError?.message ?? 'No se pudo actualizar el rol' }
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ role })
+    .eq('id', profileId)
+    .select('id, role')
+    .maybeSingle()
+
   if (error) return { error: error.message }
+  if (!data) {
+    return {
+      error:
+        'No se guardó el cambio. Ejecuta supabase/migration-fix-team-roles.sql en el SQL Editor de Supabase e intenta de nuevo.',
+    }
+  }
+
   await supabase.from('activity_log').insert({
     user_id: userId ?? null,
     action: 'rol_actualizado',
