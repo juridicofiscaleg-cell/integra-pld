@@ -553,3 +553,214 @@ export async function saveSanctionsResults(
 
   return {}
 }
+
+export async function revertStage(
+  expedienteId: string,
+  stageIndex: number,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { error: 'Supabase no configurado' }
+  }
+
+  const { data: stage } = await supabase
+    .from('expediente_stages')
+    .select('status, name')
+    .eq('expediente_id', expedienteId)
+    .eq('stage_index', stageIndex)
+    .single()
+
+  if (!stage || stage.status !== 'completada') {
+    return { error: 'Solo puedes deshacer etapas completadas.' }
+  }
+
+  await supabase
+    .from('expediente_stages')
+    .update({ status: 'en_progreso', completed_at: null, completed_by: null })
+    .eq('expediente_id', expedienteId)
+    .eq('stage_index', stageIndex)
+
+  const nextIndex = stageIndex + 1
+  const { data: nextStage } = await supabase
+    .from('expediente_stages')
+    .select('status')
+    .eq('expediente_id', expedienteId)
+    .eq('stage_index', nextIndex)
+    .maybeSingle()
+
+  if (nextStage && nextStage.status !== 'pendiente') {
+    await supabase
+      .from('expediente_stages')
+      .update({ status: 'pendiente', started_at: null })
+      .eq('expediente_id', expedienteId)
+      .eq('stage_index', nextIndex)
+  }
+
+  const { data: exp } = await supabase
+    .from('expedientes')
+    .select('client_id')
+    .eq('id', expedienteId)
+    .single()
+
+  await supabase
+    .from('expedientes')
+    .update({
+      current_stage_index: stageIndex,
+      status: 'activo',
+      closed_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', expedienteId)
+
+  await supabase.from('activity_log').insert({
+    expediente_id: expedienteId,
+    client_id: exp?.client_id,
+    user_id: userId ?? null,
+    action: 'etapa_revertida',
+    description: `Deshizo completado de "${stage.name}"`,
+  })
+
+  return {}
+}
+
+export async function deleteClient(clientId: string, userId?: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { data: client } = await supabase.from('clients').select('name').eq('id', clientId).single()
+  const { error } = await supabase.from('clients').delete().eq('id', clientId)
+  if (error) return { error: error.message }
+  await supabase.from('activity_log').insert({
+    client_id: clientId,
+    user_id: userId ?? null,
+    action: 'cliente_eliminado',
+    description: `Eliminó cliente "${client?.name ?? clientId}"`,
+  })
+  return {}
+}
+
+export async function deleteExpediente(expedienteId: string, userId?: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { data: exp } = await supabase.from('expedientes').select('title, client_id').eq('id', expedienteId).single()
+  const { error } = await supabase.from('expedientes').delete().eq('id', expedienteId)
+  if (error) return { error: error.message }
+  await supabase.from('activity_log').insert({
+    expediente_id: expedienteId,
+    client_id: exp?.client_id,
+    user_id: userId ?? null,
+    action: 'expediente_eliminado',
+    description: `Eliminó expediente "${exp?.title ?? expedienteId}"`,
+  })
+  return {}
+}
+
+export async function deleteKycRecord(kycId: string, userId?: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { data: kyc } = await supabase.from('kyc_records').select('client_id').eq('id', kycId).single()
+  const { error } = await supabase.from('kyc_records').delete().eq('id', kycId)
+  if (error) return { error: error.message }
+  await supabase.from('activity_log').insert({
+    client_id: kyc?.client_id,
+    user_id: userId ?? null,
+    action: 'kyc_eliminado',
+    description: 'Eliminó registro KYC',
+  })
+  return {}
+}
+
+export async function replaceDocument(
+  docId: string,
+  oldStoragePath: string,
+  file: File,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+
+  const { data: existing } = await supabase.from('documents').select('*').eq('id', docId).single()
+  if (!existing) return { error: 'Documento no encontrado' }
+
+  await supabase.storage.from('documentos').remove([oldStoragePath])
+
+  const folder = existing.expediente_id ?? existing.client_id ?? existing.kyc_id ?? 'general'
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `${folder}/${Date.now()}_${safeName}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('documentos')
+    .upload(storagePath, file, { upsert: false })
+
+  if (uploadError) return { error: uploadError.message }
+
+  const { error } = await supabase
+    .from('documents')
+    .update({
+      name: file.name,
+      storage_path: storagePath,
+      file_size: file.size,
+      uploaded_by: userId ?? null,
+      uploaded_at: new Date().toISOString(),
+    })
+    .eq('id', docId)
+
+  if (error) return { error: error.message }
+
+  await supabase.from('activity_log').insert({
+    expediente_id: existing.expediente_id,
+    client_id: existing.client_id,
+    user_id: userId ?? null,
+    action: 'documento_reemplazado',
+    description: `Reemplazó documento "${file.name}"`,
+  })
+
+  return {}
+}
+
+export async function uploadLegalResource(
+  file: File,
+  meta: {
+    title: string
+    category: string
+    description?: string
+    article_ref?: string
+    is_template?: boolean
+  },
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `${meta.category}/${Date.now()}_${safeName}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('plantillas')
+    .upload(storagePath, file, { upsert: false })
+
+  if (uploadError) return { error: uploadError.message }
+
+  const { error } = await supabase.from('legal_resources').insert({
+    title: meta.title.trim(),
+    category: meta.category,
+    description: meta.description?.trim() || null,
+    article_ref: meta.article_ref?.trim() || null,
+    storage_path: storagePath,
+    file_name: file.name,
+    file_size: file.size,
+    is_template: meta.is_template ?? false,
+    uploaded_by: userId ?? null,
+  })
+
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function deleteLegalResource(id: string, storagePath?: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  if (storagePath) await supabase.storage.from('plantillas').remove([storagePath])
+  const { error } = await supabase.from('legal_resources').delete().eq('id', id)
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function getLegalResourceUrl(storagePath: string): Promise<string | null> {
+  if (!supabase) return null
+  const { data } = await supabase.storage.from('plantillas').createSignedUrl(storagePath, 3600)
+  return data?.signedUrl ?? null
+}

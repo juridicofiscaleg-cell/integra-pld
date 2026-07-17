@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import {
   AlertTriangle,
+  BookOpen,
   Briefcase,
   FileCheck,
   FileSpreadsheet,
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/clientes', icon: Users, label: 'Clientes' },
   { to: '/expedientes', icon: FolderOpen, label: 'Expedientes' },
   { to: '/kyc', icon: FileCheck, label: 'KYC' },
+  { to: '/biblioteca', icon: BookOpen, label: 'Biblioteca' },
   { to: '/alertas', icon: AlertTriangle, label: 'Alertas' },
   { to: '/reportes', icon: FileSpreadsheet, label: 'Reportes' },
   { to: '/buscar', icon: Search, label: 'Buscar' },

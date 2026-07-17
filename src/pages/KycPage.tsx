@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Pencil, Plus, Shield } from 'lucide-react'
+import { Pencil, Plus, Shield, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { deleteKycRecord } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 import { NewKycModal } from '../components/kyc/NewKycModal'
 import { EditKycModal } from '../components/kyc/EditKycModal'
 import { useClients, useExpedientes, useKycRecords } from '../hooks/useData'
@@ -24,11 +27,16 @@ function checklistProgress(checklist: KycChecklist): number {
 }
 
 export function KycPage() {
+  const { user, profile } = useAuth()
   const { records, loading, refetch } = useKycRecords()
   const { clients } = useClients()
   const { expedientes } = useExpedientes()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<KycRecord | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<KycRecord | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const canDelete = profile?.role !== 'asistente'
 
   return (
     <div className="page">
@@ -73,6 +81,11 @@ export function KycPage() {
                     <button type="button" className="icon-btn" onClick={() => setEditing(kyc)} title="Editar">
                       <Pencil size={16} />
                     </button>
+                    {canDelete && (
+                      <button type="button" className="icon-btn danger" onClick={() => setDeleteTarget(kyc)} title="Eliminar">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -131,6 +144,24 @@ export function KycPage() {
         kyc={editing}
         onClose={() => setEditing(null)}
         onUpdated={refetch}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Eliminar KYC"
+        message="¿Eliminar este registro de debida diligencia?"
+        confirmLabel="Eliminar"
+        danger
+        loading={deleting}
+        onConfirm={async () => {
+          if (!deleteTarget) return
+          setDeleting(true)
+          await deleteKycRecord(deleteTarget.id, user?.id)
+          setDeleting(false)
+          setDeleteTarget(null)
+          refetch()
+        }}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   )

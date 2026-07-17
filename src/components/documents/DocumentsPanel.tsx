@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react'
-import { Download, FileText, Trash2, Upload } from 'lucide-react'
+import { Download, FileText, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Select } from '../ui/Select'
-import { deleteDocument, getDocumentUrl, uploadDocument } from '../../lib/api'
+import { deleteDocument, getDocumentUrl, replaceDocument, uploadDocument } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
 import { useDocuments } from '../../hooks/useData'
+import { DOC_TYPE_OPTIONS, DOCUMENT_TEMPLATES } from '../../lib/document-templates'
 import { formatDate } from '../../lib/utils'
 
 interface DocumentsPanelProps {
@@ -13,15 +14,15 @@ interface DocumentsPanelProps {
   kycId?: string
 }
 
-import { DOC_TYPE_OPTIONS, DOCUMENT_TEMPLATES } from '../../lib/document-templates'
-
 export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanelProps) {
   const { user, profile } = useAuth()
   const canDelete = profile?.role !== 'asistente'
   const { documents, loading, refetch } = useDocuments({ expedienteId, clientId, kycId })
   const fileRef = useRef<HTMLInputElement>(null)
+  const replaceRef = useRef<HTMLInputElement>(null)
   const [docType, setDocType] = useState<string>(DOC_TYPE_OPTIONS[0])
   const [uploading, setUploading] = useState(false)
+  const [replacingId, setReplacingId] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   async function handleUpload(file: File) {
@@ -33,6 +34,19 @@ export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanel
       user?.id,
     )
     setUploading(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    refetch()
+  }
+
+  async function handleReplace(docId: string, storagePath: string, file: File) {
+    setUploading(true)
+    setError('')
+    const result = await replaceDocument(docId, storagePath, file, user?.id)
+    setUploading(false)
+    setReplacingId(null)
     if (result.error) {
       setError(result.error)
       return
@@ -73,6 +87,18 @@ export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanel
             e.target.value = ''
           }}
         />
+        <input
+          ref={replaceRef}
+          type="file"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            const docId = replaceRef.current?.dataset.docId
+            const path = replaceRef.current?.dataset.storagePath
+            if (file && docId && path) handleReplace(docId, path, file)
+            e.target.value = ''
+          }}
+        />
         <Button
           type="button"
           variant="secondary"
@@ -103,9 +129,27 @@ export function DocumentsPanel({ expedienteId, clientId, kycId }: DocumentsPanel
                 <Download size={16} />
               </button>
               {canDelete && (
-                <button type="button" className="icon-btn danger" onClick={() => handleDelete(doc.id, doc.storage_path)} title="Eliminar">
-                  <Trash2 size={16} />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Reemplazar"
+                    disabled={uploading && replacingId === doc.id}
+                    onClick={() => {
+                      setReplacingId(doc.id)
+                      if (replaceRef.current) {
+                        replaceRef.current.dataset.docId = doc.id
+                        replaceRef.current.dataset.storagePath = doc.storage_path
+                        replaceRef.current.click()
+                      }
+                    }}
+                  >
+                    <RefreshCw size={16} />
+                  </button>
+                  <button type="button" className="icon-btn danger" onClick={() => handleDelete(doc.id, doc.storage_path)} title="Eliminar">
+                    <Trash2 size={16} />
+                  </button>
+                </>
               )}
             </div>
           ))}

@@ -17,6 +17,7 @@ import type {
   Expediente,
   ExpedienteStage,
   KycRecord,
+  LegalResource,
   Profile,
 } from '../lib/types'
 
@@ -276,4 +277,30 @@ export function useProfiles() {
   }, [])
 
   return { profiles, loading }
+}
+
+export function useLegalResources() {
+  const [resources, setResources] = useState<LegalResource[]>([])
+  const [loading, setLoading] = useState(true)
+
+  async function fetchResources() {
+    if (!isSupabaseConfigured) {
+      setResources([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const { data } = await supabase!
+      .from('legal_resources')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setResources(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchResources()
+  }, [])
+
+  return { resources, loading, refetch: fetchResources }
 }

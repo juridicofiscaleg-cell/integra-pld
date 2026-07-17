@@ -7,6 +7,7 @@ interface TimelineProps {
   stages: ExpedienteStage[]
   currentIndex: number
   onAdvance?: (stageIndex: number) => void
+  onRevert?: (stageIndex: number) => void
   readonly?: boolean
 }
 
@@ -17,7 +18,12 @@ const statusIcon = {
   bloqueada: Lock,
 }
 
-export function Timeline({ stages, currentIndex, onAdvance, readonly }: TimelineProps) {
+export function Timeline({ stages, currentIndex, onAdvance, onRevert, readonly }: TimelineProps) {
+  const lastCompletedIndex = stages.reduce(
+    (acc, s, i) => (s.status === 'completada' ? i : acc),
+    -1,
+  )
+
   return (
     <div className="timeline">
       {stages.map((stage, i) => {
@@ -56,6 +62,14 @@ export function Timeline({ stages, currentIndex, onAdvance, readonly }: Timeline
                   onClick={() => onAdvance(stage.stage_index)}
                 >
                   Marcar como completada →
+                </button>
+              )}
+              {!readonly && isDone && onRevert && i === lastCompletedIndex && (
+                <button
+                  className="timeline-action timeline-action-revert"
+                  onClick={() => onRevert(stage.stage_index)}
+                >
+                  ← Deshacer completado
                 </button>
               )}
             </div>

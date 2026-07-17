@@ -108,6 +108,11 @@ export interface SanctionsResult {
   checked_at: string
   match: boolean
   details?: string
+  source?: 'opensanctions' | 'simulación'
+  score?: number
+  matched_name?: string
+  topics?: string[]
+  datasets?: string[]
 }
 
 export type SanctionsResults = Record<string, SanctionsResult>
@@ -172,6 +177,23 @@ export interface ActivityLog {
   metadata?: Record<string, unknown>
   created_at: string
   profiles?: Profile
+}
+
+export type LegalCategory = 'lfpiorpi' | 'formato' | 'guia' | 'plantilla' | 'otro'
+
+export interface LegalResource {
+  id: string
+  title: string
+  category: LegalCategory
+  description?: string
+  article_ref?: string
+  storage_path?: string
+  file_name?: string
+  file_size?: number
+  is_template: boolean
+  uploaded_by?: string
+  created_at: string
+  updated_at: string
 }
 
 export const MATTER_TYPE_LABELS: Record<MatterType, string> = {

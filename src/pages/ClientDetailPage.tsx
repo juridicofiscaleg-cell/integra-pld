@@ -1,21 +1,30 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, FileCheck, FolderOpen, Pencil } from 'lucide-react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, FileCheck, FolderOpen, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { EditClientModal } from '../components/clients/EditClientModal'
 import { DocumentsPanel } from '../components/documents/DocumentsPanel'
 import { SanctionsPanel } from '../components/kyc/SanctionsPanel'
+import { deleteClient } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 import { useClients, useExpedientes, useKycRecords } from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { formatDate } from '../lib/utils'
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const { user, profile } = useAuth()
   const { clients, refetch } = useClients()
   const { expedientes } = useExpedientes()
   const { records: kycRecords, refetch: refetchKyc } = useKycRecords()
   const [editing, setEditing] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const canDelete = profile?.role !== 'asistente'
 
   const client = clients.find((c) => c.id === id)
   const clientExpedientes = expedientes.filter((e) => e.client_id === id)
@@ -53,6 +62,11 @@ export function ClientDetailPage() {
           <Button variant="secondary" onClick={() => setEditing(true)}>
             <Pencil size={16} /> Editar
           </Button>
+          {canDelete && (
+            <Button variant="danger" onClick={() => setDeleteOpen(true)}>
+              <Trash2 size={16} /> Eliminar
+            </Button>
+          )}
         </div>
       </header>
 
@@ -127,6 +141,22 @@ export function ClientDetailPage() {
         client={editing ? client : null}
         onClose={() => setEditing(false)}
         onUpdated={refetch}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Eliminar cliente"
+        message={`¿Eliminar "${client.name}" y todos sus expedientes, KYC y documentos?`}
+        confirmLabel="Eliminar"
+        danger
+        loading={deleting}
+        onConfirm={async () => {
+          setDeleting(true)
+          const result = await deleteClient(client.id, user?.id)
+          setDeleting(false)
+          if (!result.error) navigate('/clientes')
+        }}
+        onCancel={() => setDeleteOpen(false)}
       />
     </div>
   )

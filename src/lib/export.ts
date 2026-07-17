@@ -103,3 +103,48 @@ export function exportKycCsv(
     ]),
   )
 }
+
+export function exportActivityCsv(
+  activity: Array<{
+    description: string
+    action: string
+    created_at: string
+    profiles?: { full_name: string }
+  }>,
+) {
+  downloadCsv(
+    `integra-pld-bitacora-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Fecha', 'Acción', 'Descripción', 'Usuario'],
+    activity.map((a) => [
+      a.created_at.slice(0, 19).replace('T', ' '),
+      a.action,
+      a.description,
+      a.profiles?.full_name ?? '',
+    ]),
+  )
+}
+
+export function printReport(
+  stats: Record<string, number>,
+  clients: unknown[],
+  expedientes: unknown[],
+  kycRecords: unknown[],
+) {
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(`
+    <html><head><title>Reporte Integra PLD</title>
+    <style>body{font-family:sans-serif;padding:2rem}h1{color:#7b2d3e}table{border-collapse:collapse;width:100%;margin-top:1rem}td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5e8eb}</style>
+    </head><body>
+    <h1>Integra PLD — Reporte de cumplimiento</h1>
+    <p>Generado: ${new Date().toLocaleString('es-MX')}</p>
+    <h2>Resumen</h2>
+    <ul>
+      ${Object.entries(stats).map(([k, v]) => `<li>${k}: ${v}</li>`).join('')}
+    </ul>
+    <p>Clientes: ${clients.length} · Expedientes: ${expedientes.length} · KYC: ${kycRecords.length}</p>
+    </body></html>
+  `)
+  w.document.close()
+  w.print()
+}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ShieldAlert, ShieldCheck } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { saveSanctionsResults } from '../../lib/api'
+import { isOpenSanctionsConfigured } from '../../lib/opensanctions'
 import { runSanctionsCheck, sanctionsSummary } from '../../lib/sanctions'
 import { useAuth } from '../../context/AuthContext'
 import type { Client, KycRecord, SanctionsResults } from '../../lib/types'
@@ -27,7 +28,7 @@ export function SanctionsPanel({ kyc, client, onUpdated }: SanctionsPanelProps) 
     setChecking(true)
     setError('')
 
-    const checkResults = await runSanctionsCheck(client.name, client.rfc)
+    const checkResults = await runSanctionsCheck(client.name, client.client_type, client.rfc)
     const sanctionsMap: SanctionsResults = Object.fromEntries(
       checkResults.map((r) => [r.list, r]),
     )
@@ -52,7 +53,9 @@ export function SanctionsPanel({ kyc, client, onUpdated }: SanctionsPanelProps) 
         </Button>
       </div>
       <p className="card-desc">
-        OFAC, SAT Art. 69-B y lista consolidada ONU. Simulación — conectar API real en producción.
+        {isOpenSanctionsConfigured()
+          ? 'Consulta en vivo vía OpenSanctions (sanciones, PEP, listas México).'
+          : 'Modo simulación. Agrega VITE_OPENSANCTIONS_API_KEY en .env y GitHub Secrets.'}
       </p>
 
       {error && <p className="form-error">{error}</p>}
@@ -75,7 +78,7 @@ export function SanctionsPanel({ kyc, client, onUpdated }: SanctionsPanelProps) 
               <strong>{r.label}</strong>
               <span>{r.match ? '⚠ Coincidencia' : '✓ Limpio'}</span>
               <p>{r.details}</p>
-              <small>Consultado: {formatDateTime(r.checked_at)}</small>
+              <small>Fuente: {r.source ?? 'N/A'} · Consultado: {formatDateTime(r.checked_at)}</small>
             </div>
           ))}
         </div>
