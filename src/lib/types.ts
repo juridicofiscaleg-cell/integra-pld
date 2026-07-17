@@ -118,10 +118,29 @@ export interface TrainingSession {
   topic: string
   participants?: string
   duration_hours?: number
+  instructor?: string
+  location?: string
+  modality?: TrainingModality
   evidence_path?: string
   notes?: string
+  certificate_text?: string
+  certificate_generated_at?: string
   created_by?: string
   created_at: string
+}
+
+export type TrainingModality = 'presencial' | 'virtual' | 'hibrido'
+
+export const TRAINING_MODALITY_LABELS: Record<TrainingModality, string> = {
+  presencial: 'Presencial',
+  virtual: 'Virtual',
+  hibrido: 'Híbrido',
+}
+
+export interface FirmProfile {
+  name: string
+  rfc?: string
+  address?: string
 }
 
 export interface ComplianceOfficer {
@@ -129,6 +148,7 @@ export interface ComplianceOfficer {
   email: string
   appointed_at?: string
   rfc?: string
+  phone?: string
 }
 
 export interface Profile {

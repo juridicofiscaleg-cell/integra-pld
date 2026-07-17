@@ -1263,7 +1263,7 @@ export async function deleteExpedienteComment(commentId: string): Promise<{ erro
   return {}
 }
 
-export async function getComplianceOfficer(): Promise<{ officer?: import('./types').ComplianceOfficer; error?: string }> {
+export async function getComplianceOfficer(): Promise<{ officer?: import('./types').ComplianceOfficer; updatedAt?: string; error?: string }> {
   if (!supabase) {
     try {
       const raw = localStorage.getItem('integra_compliance_officer')
@@ -1275,7 +1275,7 @@ export async function getComplianceOfficer(): Promise<{ officer?: import('./type
   }
   const { data, error } = await supabase
     .from('firm_settings')
-    .select('value')
+    .select('value, updated_at')
     .eq('key', 'compliance_officer')
     .maybeSingle()
   if (error) {
@@ -1284,7 +1284,10 @@ export async function getComplianceOfficer(): Promise<{ officer?: import('./type
       : ''
     return { officer: { name: '', email: '' }, error: error.message + migrationHint }
   }
-  return { officer: (data?.value ?? { name: '', email: '' }) as import('./types').ComplianceOfficer }
+  return {
+    officer: (data?.value ?? { name: '', email: '' }) as import('./types').ComplianceOfficer,
+    updatedAt: data?.updated_at,
+  }
 }
 
 export async function saveComplianceOfficer(officer: import('./types').ComplianceOfficer): Promise<{ error?: string }> {
@@ -1311,17 +1314,115 @@ export async function saveComplianceOfficer(officer: import('./types').Complianc
   return {}
 }
 
+export async function getFirmProfile(): Promise<{ firm?: import('./types').FirmProfile; error?: string }> {
+  if (!supabase) {
+    try {
+      const raw = localStorage.getItem('integra_firm_profile')
+      if (raw) return { firm: JSON.parse(raw) as import('./types').FirmProfile }
+    } catch {
+      /* ignore */
+    }
+    return { firm: { name: '' } }
+  }
+  const { data, error } = await supabase
+    .from('firm_settings')
+    .select('value')
+    .eq('key', 'firm_profile')
+    .maybeSingle()
+  if (error) return { firm: { name: '' }, error: error.message }
+  return { firm: (data?.value ?? { name: '' }) as import('./types').FirmProfile }
+}
+
+export async function saveFirmProfile(firm: import('./types').FirmProfile): Promise<{ error?: string }> {
+  if (!supabase) {
+    try {
+      localStorage.setItem('integra_firm_profile', JSON.stringify(firm))
+      return {}
+    } catch {
+      return { error: 'Supabase no configurado' }
+    }
+  }
+  const { error } = await supabase
+    .from('firm_settings')
+    .upsert(
+      { key: 'firm_profile', value: firm, updated_at: new Date().toISOString() },
+      { onConflict: 'key' },
+    )
+  if (error) return { error: error.message }
+  return {}
+}
+
 export async function createTrainingSession(
-  data: { title: string; session_date: string; topic: string; participants?: string; duration_hours?: number; notes?: string },
+  data: {
+    title: string
+    session_date: string
+    topic: string
+    participants?: string
+    duration_hours?: number
+    instructor?: string
+    location?: string
+    modality?: string
+    notes?: string
+  },
   userId?: string,
+): Promise<{ id?: string; error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { data: row, error } = await supabase
+    .from('training_sessions')
+    .insert({
+      ...data,
+      participants: data.participants?.trim() || null,
+      notes: data.notes?.trim() || null,
+      instructor: data.instructor?.trim() || null,
+      location: data.location?.trim() || null,
+      modality: data.modality || 'presencial',
+      created_by: userId ?? null,
+    })
+    .select('id')
+    .single()
+  if (error) return { error: error.message }
+  return { id: row?.id }
+}
+
+export async function updateTrainingSession(
+  id: string,
+  data: Partial<{
+    title: string
+    session_date: string
+    topic: string
+    participants: string
+    duration_hours: number
+    instructor: string
+    location: string
+    modality: string
+    notes: string
+  }>,
 ): Promise<{ error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
-  const { error } = await supabase.from('training_sessions').insert({
-    ...data,
-    participants: data.participants?.trim() || null,
-    notes: data.notes?.trim() || null,
-    created_by: userId ?? null,
-  })
+  const { error } = await supabase.from('training_sessions').update(data).eq('id', id)
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function deleteTrainingSession(id: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('training_sessions').delete().eq('id', id)
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function saveTrainingCertificate(
+  id: string,
+  certificateText: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase
+    .from('training_sessions')
+    .update({
+      certificate_text: certificateText,
+      certificate_generated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
   if (error) return { error: error.message }
   return {}
 }

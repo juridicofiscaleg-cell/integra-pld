@@ -11,6 +11,7 @@ import {
   DEMO_OPERATIONS,
   DEMO_PROFILE,
   DEMO_STAGES,
+  DEMO_TRAININGS,
 } from '../lib/demo-data'
 import type {
   ActivityLog,
@@ -466,14 +467,16 @@ export function useTrainingSessions() {
 
   async function fetchSessions() {
     if (!isSupabaseConfigured) {
-      setSessions([])
+      setSessions(DEMO_TRAININGS)
       setLoading(false)
-      return
+      return DEMO_TRAININGS
     }
     setLoading(true)
     const { data } = await supabase!.from('training_sessions').select('*').order('session_date', { ascending: false })
-    setSessions(data ?? [])
+    const list = data ?? []
+    setSessions(list)
     setLoading(false)
+    return list
   }
 
   useEffect(() => {

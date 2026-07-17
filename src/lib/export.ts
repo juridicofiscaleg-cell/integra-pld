@@ -178,6 +178,36 @@ export function exportNoticesCsv(
   )
 }
 
+export function exportTrainingsCsv(
+  sessions: Array<{
+    title: string
+    session_date: string
+    topic: string
+    participants?: string
+    duration_hours?: number
+    instructor?: string
+    location?: string
+    modality?: string
+    certificate_generated_at?: string
+  }>,
+) {
+  downloadCsv(
+    `integra-pld-capacitaciones-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Título', 'Fecha', 'Tema', 'Participantes', 'Horas', 'Instructor', 'Lugar', 'Modalidad', 'Constancia'],
+    sessions.map((s) => [
+      s.title,
+      s.session_date,
+      s.topic,
+      s.participants ?? '',
+      s.duration_hours != null ? String(s.duration_hours) : '',
+      s.instructor ?? '',
+      s.location ?? '',
+      s.modality ?? '',
+      s.certificate_generated_at ? 'Sí' : 'No',
+    ]),
+  )
+}
+
 export function printReport(
   stats: Record<string, number>,
   clients: unknown[],

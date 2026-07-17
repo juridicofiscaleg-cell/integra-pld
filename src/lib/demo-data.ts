@@ -7,6 +7,7 @@ import type {
   KycRecord,
   PldOperation,
   Profile,
+  TrainingSession,
   UnusualNotice,
 } from './types'
 
@@ -225,6 +226,23 @@ export const DEMO_NOTICES: UnusualNotice[] = [
     created_at: now,
     updated_at: now,
     clients: DEMO_CLIENTS[0],
+  },
+]
+
+export const DEMO_TRAININGS: TrainingSession[] = [
+  {
+    id: 'train-1',
+    title: 'Capacitación anual PLD/FT 2026',
+    session_date: '2026-06-20',
+    topic: 'LFPIORPI, señales de alerta y avisos',
+    participants: 'Lic. Adrián Gerardo\nLic. María Pérez',
+    duration_hours: 4,
+    instructor: 'Lic. Adrián Gerardo',
+    location: 'Sala de juntas',
+    modality: 'presencial',
+    notes: 'Repaso de umbrales, KYC y procedimiento de avisos inusuales.',
+    created_by: 'demo-user-1',
+    created_at: now,
   },
 ]
 
