@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { syncKycAlerts } from '../lib/api'
+import { syncKycAlerts, fetchComplianceOfficers } from '../lib/api'
 import {
   DEMO_ACTIVITY,
   DEMO_ALERTS,
@@ -8,6 +8,7 @@ import {
   DEMO_EXPEDIENTES,
   DEMO_KYC,
   DEMO_NOTICES,
+  DEMO_OFFICERS,
   DEMO_OPERATIONS,
   DEMO_PROFILE,
   DEMO_STAGES,
@@ -461,6 +462,33 @@ export function useExpedienteComments(expedienteId: string) {
   return { comments, loading, refetch: fetchComments }
 }
 
+export function useComplianceOfficers() {
+  const [officers, setOfficers] = useState<import('../lib/types').ClientComplianceOfficer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string>()
+
+  async function fetchOfficers() {
+    if (!isSupabaseConfigured) {
+      setOfficers(DEMO_OFFICERS)
+      setLoading(false)
+      setError(undefined)
+      return DEMO_OFFICERS
+    }
+    setLoading(true)
+    const { officers: data, error: err } = await fetchComplianceOfficers()
+    setError(err)
+    setOfficers(data)
+    setLoading(false)
+    return data
+  }
+
+  useEffect(() => {
+    fetchOfficers()
+  }, [])
+
+  return { officers, loading, error, refetch: fetchOfficers }
+}
+
 export function useTrainingSessions() {
   const [sessions, setSessions] = useState<import('../lib/types').TrainingSession[]>([])
   const [loading, setLoading] = useState(true)
@@ -472,7 +500,10 @@ export function useTrainingSessions() {
       return DEMO_TRAININGS
     }
     setLoading(true)
-    const { data } = await supabase!.from('training_sessions').select('*').order('session_date', { ascending: false })
+    const { data } = await supabase!
+      .from('training_sessions')
+      .select('*, clients(*), officers:client_compliance_officers(*)')
+      .order('session_date', { ascending: false })
     const list = data ?? []
     setSessions(list)
     setLoading(false)

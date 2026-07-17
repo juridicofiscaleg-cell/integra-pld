@@ -2,6 +2,7 @@ import type {
   ActivityLog,
   Alert,
   Client,
+  ClientComplianceOfficer,
   Expediente,
   ExpedienteStage,
   KycRecord,
@@ -229,9 +230,38 @@ export const DEMO_NOTICES: UnusualNotice[] = [
   },
 ]
 
+export const DEMO_OFFICERS: ClientComplianceOfficer[] = [
+  {
+    id: 'off-1',
+    client_id: 'client-1',
+    name: 'Lic. Roberto Mendoza',
+    email: 'roberto.mendoza@grupofinanciero.mx',
+    phone: '662 304 6771',
+    rfc: 'MER850101ABC',
+    appointed_at: '2025-01-15',
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+    clients: DEMO_CLIENTS[0],
+  },
+  {
+    id: 'off-2',
+    client_id: 'client-2',
+    name: 'Lic. Ana Lucía Vega',
+    email: 'ana.vega@email.com',
+    appointed_at: '2026-03-01',
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+    clients: DEMO_CLIENTS[1],
+  },
+]
+
 export const DEMO_TRAININGS: TrainingSession[] = [
   {
     id: 'train-1',
+    client_id: 'client-1',
+    officer_id: 'off-1',
     title: 'Capacitación anual PLD/FT 2026',
     session_date: '2026-06-20',
     topic: 'LFPIORPI, señales de alerta y avisos',
@@ -243,6 +273,8 @@ export const DEMO_TRAININGS: TrainingSession[] = [
     notes: 'Repaso de umbrales, KYC y procedimiento de avisos inusuales.',
     created_by: 'demo-user-1',
     created_at: now,
+    clients: DEMO_CLIENTS[0],
+    officers: DEMO_OFFICERS[0],
   },
 ]
 

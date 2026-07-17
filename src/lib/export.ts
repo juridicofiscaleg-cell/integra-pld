@@ -183,6 +183,8 @@ export function exportTrainingsCsv(
     title: string
     session_date: string
     topic: string
+    client_id?: string
+    clients?: { name?: string }
     participants?: string
     duration_hours?: number
     instructor?: string
@@ -190,21 +192,26 @@ export function exportTrainingsCsv(
     modality?: string
     certificate_generated_at?: string
   }>,
+  clients: Array<{ id: string; name: string }> = [],
 ) {
   downloadCsv(
     `integra-pld-capacitaciones-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['Título', 'Fecha', 'Tema', 'Participantes', 'Horas', 'Instructor', 'Lugar', 'Modalidad', 'Constancia'],
-    sessions.map((s) => [
-      s.title,
-      s.session_date,
-      s.topic,
-      s.participants ?? '',
-      s.duration_hours != null ? String(s.duration_hours) : '',
-      s.instructor ?? '',
-      s.location ?? '',
-      s.modality ?? '',
-      s.certificate_generated_at ? 'Sí' : 'No',
-    ]),
+    ['Cliente', 'Título', 'Fecha', 'Tema', 'Participantes', 'Horas', 'Instructor', 'Lugar', 'Modalidad', 'Diploma'],
+    sessions.map((s) => {
+      const clientName = s.clients?.name ?? clients.find((c) => c.id === s.client_id)?.name ?? ''
+      return [
+        clientName,
+        s.title,
+        s.session_date,
+        s.topic,
+        s.participants ?? '',
+        s.duration_hours != null ? String(s.duration_hours) : '',
+        s.instructor ?? '',
+        s.location ?? '',
+        s.modality ?? '',
+        s.certificate_generated_at ? 'Sí' : 'No',
+      ]
+    }),
   )
 }
 

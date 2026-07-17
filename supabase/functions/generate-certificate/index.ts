@@ -47,29 +47,21 @@ serve(async (req) => {
       )
     }
 
-    const firm = payload.firm?.name || 'el despacho'
-    const participants = payload.training.participants?.trim() || 'personal del despacho'
-    const prompt = `Redacta el cuerpo de una CONSTANCIA DE CAPACITACIÓN PLD/FT en español jurídico mexicano, formal y profesional.
+    const prompt = `Genera UNA sola oración formal en español mexicano para un diploma de reconocimiento PLD/FT.
 
-Datos:
-- Despacho/sujeto obligado: ${firm}
-- Capacitación: ${payload.training.title}
-- Tema: ${payload.training.topic}
-- Fecha: ${formatDateMx(payload.training.session_date)}
-- Duración: ${payload.training.duration_hours ?? 'no especificada'} horas
-- Modalidad: ${payload.training.modality ?? 'presencial'}
-- Instructor: ${payload.training.instructor ?? 'no especificado'}
-- Lugar: ${payload.training.location ?? 'instalaciones del despacho'}
-- Participantes: ${participants}
-- Notas adicionales: ${payload.training.notes ?? 'ninguna'}
-- Oficial de cumplimiento: ${payload.officer?.name ?? 'Oficial de cumplimiento PLD/FT'}
+Capacitación: ${payload.training.title}
+Tema: ${payload.training.topic}
+Fecha: ${formatDateMx(payload.training.session_date)}
+Despacho: ${payload.firm?.name || 'despacho jurídico'}
+Notas del curso: ${payload.training.notes || 'ninguna'}
 
-Requisitos:
-- 2 a 4 párrafos en prosa continua (sin viñetas, sin markdown)
-- Mencionar LFPIORPI y el propósito formativo en PLD/FT
-- Indicar que se extiende constancia a los participantes
-- No incluir encabezado, firmas ni datos de contacto (solo el cuerpo narrativo)
-- Tono de despacho jurídico mexicano`
+Reglas estrictas:
+- Exactamente UNA oración (máximo 35 palabras)
+- Tono elegante, jurídico y profesional
+- Debe mencionar el cumplimiento en materia PLD/FT o LFPIORPI
+- NO incluir nombre de participantes, firmas, fechas ni encabezados
+- NO usar comillas, markdown ni viñetas
+- Solo devuelve la oración, nada más`
 
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -80,11 +72,14 @@ Requisitos:
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'Eres un abogado experto en cumplimiento PLD/FT en México. Redactas constancias formales.' },
+          {
+            role: 'system',
+            content: 'Redactas una sola línea de reconocimiento para diplomas legales PLD/FT en México. Respuesta: solo la oración.',
+          },
           { role: 'user', content: prompt },
         ],
-        temperature: 0.4,
-        max_tokens: 900,
+        temperature: 0.3,
+        max_tokens: 120,
       }),
     })
 
@@ -97,9 +92,10 @@ Requisitos:
     }
 
     const json = await res.json()
-    const bodyText = json.choices?.[0]?.message?.content?.trim()
+    let recognitionLine = json.choices?.[0]?.message?.content?.trim() ?? ''
+    recognitionLine = recognitionLine.replace(/^["'«»]+|["'«»]+$/g, '').replace(/\s+/g, ' ')
 
-    if (!bodyText) {
+    if (!recognitionLine) {
       return new Response(
         JSON.stringify({ error: 'Respuesta vacía de OpenAI', fallback: true }),
         { status: 502, headers: { ...cors, 'Content-Type': 'application/json' } },
@@ -107,7 +103,7 @@ Requisitos:
     }
 
     return new Response(
-      JSON.stringify({ bodyText, source: 'ai' }),
+      JSON.stringify({ recognitionLine, source: 'ai' }),
       { headers: { ...cors, 'Content-Type': 'application/json' } },
     )
   } catch (e) {

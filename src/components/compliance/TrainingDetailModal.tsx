@@ -5,20 +5,23 @@ import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { deleteTrainingSession, saveTrainingCertificate } from '../../lib/api'
 import { generateCertificateText } from '../../lib/certificates'
+import { resolveCertificateContext } from '../../lib/compliance-officers'
 import {
   buildCertificateHtml,
+  buildSingleParticipantCertificateHtml,
   downloadCertificateHtml,
   openCertificatePrint,
+  parseCertificateData,
   parseParticipants,
 } from '../../lib/certificate-template'
-import type { ComplianceOfficer, FirmProfile, TrainingSession } from '../../lib/types'
+import type { Client, ClientComplianceOfficer, TrainingSession } from '../../lib/types'
 import { TRAINING_MODALITY_LABELS } from '../../lib/types'
 import { formatDate, formatRelative } from '../../lib/utils'
 
 interface TrainingDetailModalProps {
   session: TrainingSession | null
-  officer: ComplianceOfficer
-  firm: FirmProfile
+  clients: Client[]
+  officers: ClientComplianceOfficer[]
   canDelete: boolean
   onClose: () => void
   onEdit: (session: TrainingSession) => void
@@ -28,8 +31,8 @@ interface TrainingDetailModalProps {
 
 export function TrainingDetailModal({
   session,
-  officer,
-  firm,
+  clients,
+  officers,
   canDelete,
   onClose,
   onEdit,
@@ -40,12 +43,24 @@ export function TrainingDetailModal({
   const [certError, setCertError] = useState('')
   const [certInfo, setCertInfo] = useState('')
   const [previewHtml, setPreviewHtml] = useState('')
+  const [previewParticipant, setPreviewParticipant] = useState('')
   const [deleting, setDeleting] = useState(false)
 
   if (!session) return null
 
+  const { officer, firm } = resolveCertificateContext(session, clients, officers)
   const participants = parseParticipants(session.participants)
+  const displayParticipants = participants.length > 0 ? participants : ['Personal del despacho']
   const hasCertificate = Boolean(session.certificate_text)
+  const certData = parseCertificateData(session.certificate_text)
+
+  function buildPreviewHtml(stored?: string | null, onlyParticipant?: string) {
+    const ctx = { training: session!, officer, firm }
+    if (onlyParticipant) {
+      return buildSingleParticipantCertificateHtml(ctx, onlyParticipant, stored)
+    }
+    return buildCertificateHtml(ctx, stored)
+  }
 
   async function handleGenerate() {
     setGenerating(true)
@@ -55,16 +70,17 @@ export function TrainingDetailModal({
     setGenerating(false)
 
     if (result.error && result.source === 'template') {
-      setCertInfo('IA no disponible — se usó plantilla profesional.')
+      setCertInfo('IA no disponible — se usó texto de reconocimiento estándar.')
     } else if (result.source === 'ai') {
-      setCertInfo('Constancia redactada con IA y guardada en el historial.')
+      setCertInfo('Diploma generado con IA. Mismo formato para todos los participantes.')
     } else {
-      setCertInfo('Constancia generada con plantilla LFPIORPI.')
+      setCertInfo('Diploma generado con formato estándar LFPIORPI.')
     }
 
     if (result.text) {
       await saveTrainingCertificate(session!.id, result.text)
-      setPreviewHtml(result.html ?? buildCertificateHtml({ training: session!, officer, firm }, result.text))
+      setPreviewParticipant(displayParticipants[0])
+      setPreviewHtml(buildPreviewHtml(result.text, displayParticipants[0]))
       onUpdated()
     } else if (result.error) {
       setCertError(result.error)
@@ -72,28 +88,29 @@ export function TrainingDetailModal({
   }
 
   function showExistingCertificate() {
-    const html = buildCertificateHtml(
-      { training: session!, officer, firm },
-      session!.certificate_text,
-    )
-    setPreviewHtml(html)
+    setPreviewParticipant(displayParticipants[0])
+    setPreviewHtml(buildPreviewHtml(session!.certificate_text, displayParticipants[0]))
   }
 
   function handlePrint() {
-    const html = previewHtml || buildCertificateHtml(
-      { training: session!, officer, firm },
-      session!.certificate_text,
-    )
+    const html = previewHtml || buildPreviewHtml(session!.certificate_text)
     openCertificatePrint(html)
   }
 
   function handleDownload() {
-    const html = previewHtml || buildCertificateHtml(
-      { training: session!, officer, firm },
-      session!.certificate_text,
-    )
+    const html = previewHtml || buildPreviewHtml(session!.certificate_text)
     const safeTitle = session!.title.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40)
     downloadCertificateHtml(html, `constancia-${safeTitle}-${session!.session_date}.html`)
+  }
+
+  function handleDownloadOne(name: string) {
+    const html = buildSingleParticipantCertificateHtml(
+      { training: session!, officer, firm },
+      name,
+      session!.certificate_text,
+    )
+    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30)
+    downloadCertificateHtml(html, `reconocimiento-${safeName}-${session!.session_date}.html`)
   }
 
   async function handleDelete() {
@@ -126,6 +143,8 @@ export function TrainingDetailModal({
         </div>
 
         <dl className="detail-dl">
+          <dt>Cliente</dt><dd>{session.clients?.name ?? clients.find((c) => c.id === session.client_id)?.name ?? '—'}</dd>
+          <dt>Oficial OC</dt><dd>{session.officers?.name ?? officers.find((o) => o.id === session.officer_id)?.name ?? officer.name}</dd>
           <dt>Fecha</dt><dd>{formatDate(session.session_date)}</dd>
           {session.duration_hours != null && (<><dt>Duración</dt><dd>{session.duration_hours} h</dd></>)}
           {session.instructor && (<><dt>Instructor</dt><dd>{session.instructor}</dd></>)}
@@ -151,30 +170,60 @@ export function TrainingDetailModal({
         )}
 
         <div className="certificate-panel">
-          <h4><FileText size={16} /> Constancia de capacitación</h4>
+          <h4><FileText size={16} /> Diploma / reconocimiento</h4>
           <p className="card-desc">
-            Genera automáticamente la constancia (con IA si está configurada, o plantilla profesional).
+            Formato fijo tipo diploma. Si hay varios participantes, se genera un reconocimiento por persona con el mismo diseño.
           </p>
+          {hasCertificate && (
+            <p className="card-desc certificate-line-preview">
+              <em>«{certData.recognitionLine}»</em>
+            </p>
+          )}
           <div className="certificate-actions">
             <Button onClick={handleGenerate} disabled={generating}>
-              <Sparkles size={16} /> {generating ? 'Generando...' : hasCertificate ? 'Regenerar constancia' : 'Generar constancia con IA'}
+              <Sparkles size={16} /> {generating ? 'Generando...' : hasCertificate ? 'Regenerar diplomas' : 'Generar diplomas con IA'}
             </Button>
             {(hasCertificate || previewHtml) && (
               <>
-                <Button variant="secondary" onClick={showExistingCertificate}><FileText size={16} /> Ver vista previa</Button>
-                <Button variant="secondary" onClick={handlePrint}><Printer size={16} /> Imprimir / PDF</Button>
-                <Button variant="secondary" onClick={handleDownload}><Download size={16} /> Descargar HTML</Button>
+                <Button variant="secondary" onClick={showExistingCertificate}><FileText size={16} /> Vista previa</Button>
+                <Button variant="secondary" onClick={handlePrint}><Printer size={16} /> Imprimir todos</Button>
+                <Button variant="secondary" onClick={handleDownload}><Download size={16} /> Descargar todos</Button>
               </>
             )}
           </div>
+          {displayParticipants.length > 1 && (hasCertificate || previewHtml) && (
+            <div className="certificate-participant-tabs">
+              <span className="card-desc">Vista por participante:</span>
+              <div className="participant-tab-row">
+                {displayParticipants.map((name) => (
+                  <Button
+                    key={name}
+                    size="sm"
+                    variant={previewParticipant === name ? 'primary' : 'secondary'}
+                    onClick={() => {
+                      setPreviewParticipant(name)
+                      setPreviewHtml(buildPreviewHtml(session.certificate_text, name))
+                    }}
+                  >
+                    {name.split(' ').slice(0, 2).join(' ')}
+                  </Button>
+                ))}
+              </div>
+              {previewParticipant && (
+                <Button size="sm" variant="ghost" onClick={() => handleDownloadOne(previewParticipant)}>
+                  <Download size={14} /> Descargar solo {previewParticipant}
+                </Button>
+              )}
+            </div>
+          )}
           {certInfo && <p className="form-success">{certInfo}</p>}
           {certError && <p className="form-error">{certError}</p>}
           {(previewHtml || session.certificate_text) && (
             <div className="certificate-preview-wrap">
               <iframe
-                title="Vista previa constancia"
+                title="Vista previa diploma"
                 className="certificate-preview-frame"
-                srcDoc={previewHtml || buildCertificateHtml({ training: session, officer, firm }, session.certificate_text)}
+                srcDoc={previewHtml || buildPreviewHtml(session.certificate_text, displayParticipants.length === 1 ? displayParticipants[0] : previewParticipant || displayParticipants[0])}
               />
             </div>
           )}

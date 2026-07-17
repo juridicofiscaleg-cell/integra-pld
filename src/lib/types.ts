@@ -116,6 +116,8 @@ export interface TrainingSession {
   title: string
   session_date: string
   topic: string
+  client_id?: string
+  officer_id?: string
   participants?: string
   duration_hours?: number
   instructor?: string
@@ -127,6 +129,25 @@ export interface TrainingSession {
   certificate_generated_at?: string
   created_by?: string
   created_at: string
+  clients?: Client
+  officers?: ClientComplianceOfficer
+}
+
+export interface ClientComplianceOfficer {
+  id: string
+  client_id: string
+  name: string
+  email?: string
+  phone?: string
+  rfc?: string
+  appointed_at?: string
+  ended_at?: string
+  is_active: boolean
+  notes?: string
+  created_by?: string
+  created_at: string
+  updated_at: string
+  clients?: Client
 }
 
 export type TrainingModality = 'presencial' | 'virtual' | 'hibrido'

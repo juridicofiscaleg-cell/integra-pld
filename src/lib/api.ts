@@ -1263,54 +1263,109 @@ export async function deleteExpedienteComment(commentId: string): Promise<{ erro
   return {}
 }
 
-export async function getComplianceOfficer(): Promise<{ officer?: import('./types').ComplianceOfficer; updatedAt?: string; error?: string }> {
+export async function fetchComplianceOfficers(): Promise<{ officers: import('./types').ClientComplianceOfficer[]; error?: string }> {
   if (!supabase) {
     try {
-      const raw = localStorage.getItem('integra_compliance_officer')
-      if (raw) return { officer: JSON.parse(raw) as import('./types').ComplianceOfficer }
+      const raw = localStorage.getItem('integra_client_officers')
+      if (raw) return { officers: JSON.parse(raw) as import('./types').ClientComplianceOfficer[] }
     } catch {
       /* ignore */
     }
-    return { officer: { name: '', email: '' } }
+    return { officers: [] }
   }
   const { data, error } = await supabase
-    .from('firm_settings')
-    .select('value, updated_at')
-    .eq('key', 'compliance_officer')
-    .maybeSingle()
+    .from('client_compliance_officers')
+    .select('*, clients(*)')
+    .order('updated_at', { ascending: false })
   if (error) {
-    const migrationHint = error.message.includes('firm_settings') || error.code === '42P01'
-      ? ' Ejecuta supabase/migration-v5.sql en el SQL Editor de Supabase.'
+    const hint = error.message.includes('client_compliance_officers') || error.code === '42P01'
+      ? ' Ejecuta supabase/migration-v5c.sql en Supabase.'
       : ''
-    return { officer: { name: '', email: '' }, error: error.message + migrationHint }
+    return { officers: [], error: error.message + hint }
   }
-  return {
-    officer: (data?.value ?? { name: '', email: '' }) as import('./types').ComplianceOfficer,
-    updatedAt: data?.updated_at,
-  }
+  return { officers: data ?? [] }
 }
 
-export async function saveComplianceOfficer(officer: import('./types').ComplianceOfficer): Promise<{ error?: string }> {
-  if (!supabase) {
-    try {
-      localStorage.setItem('integra_compliance_officer', JSON.stringify(officer))
-      return {}
-    } catch {
-      return { error: 'Supabase no configurado' }
+export async function createComplianceOfficer(
+  data: {
+    client_id: string
+    name: string
+    email?: string
+    phone?: string
+    rfc?: string
+    appointed_at?: string
+    ended_at?: string
+    is_active?: boolean
+    notes?: string
+  },
+  userId?: string,
+): Promise<{ id?: string; error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const isActive = data.is_active ?? true
+  if (isActive) {
+    await supabase
+      .from('client_compliance_officers')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('client_id', data.client_id)
+      .eq('is_active', true)
+  }
+  const { data: row, error } = await supabase
+    .from('client_compliance_officers')
+    .insert({
+      client_id: data.client_id,
+      name: data.name.trim(),
+      email: data.email?.trim() || null,
+      phone: data.phone?.trim() || null,
+      rfc: data.rfc?.trim() || null,
+      appointed_at: data.appointed_at || null,
+      ended_at: data.ended_at || null,
+      is_active: isActive,
+      notes: data.notes?.trim() || null,
+      created_by: userId ?? null,
+    })
+    .select('id')
+    .single()
+  if (error) return { error: error.message }
+  return { id: row?.id }
+}
+
+export async function updateComplianceOfficer(
+  id: string,
+  data: Partial<{
+    name: string
+    email: string
+    phone: string
+    rfc: string
+    appointed_at: string
+    ended_at: string
+    is_active: boolean
+    notes: string
+  }>,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  if (data.is_active === true) {
+    const { data: current } = await supabase.from('client_compliance_officers').select('client_id').eq('id', id).single()
+    if (current?.client_id) {
+      await supabase
+        .from('client_compliance_officers')
+        .update({ is_active: false, updated_at: new Date().toISOString() })
+        .eq('client_id', current.client_id)
+        .eq('is_active', true)
+        .neq('id', id)
     }
   }
   const { error } = await supabase
-    .from('firm_settings')
-    .upsert(
-      { key: 'compliance_officer', value: officer, updated_at: new Date().toISOString() },
-      { onConflict: 'key' },
-    )
-  if (error) {
-    const migrationHint = error.message.includes('firm_settings') || error.code === '42P01'
-      ? ' Ejecuta supabase/migration-v5.sql en el SQL Editor de Supabase.'
-      : ''
-    return { error: error.message + migrationHint }
-  }
+    .from('client_compliance_officers')
+    .update({ ...data, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function deleteComplianceOfficer(id: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('client_compliance_officers').delete().eq('id', id)
+  if (error) return { error: error.message }
   return {}
 }
 
@@ -1357,6 +1412,8 @@ export async function createTrainingSession(
     title: string
     session_date: string
     topic: string
+    client_id?: string
+    officer_id?: string
     participants?: string
     duration_hours?: number
     instructor?: string
@@ -1371,6 +1428,8 @@ export async function createTrainingSession(
     .from('training_sessions')
     .insert({
       ...data,
+      client_id: data.client_id || null,
+      officer_id: data.officer_id || null,
       participants: data.participants?.trim() || null,
       notes: data.notes?.trim() || null,
       instructor: data.instructor?.trim() || null,
@@ -1390,6 +1449,8 @@ export async function updateTrainingSession(
     title: string
     session_date: string
     topic: string
+    client_id: string
+    officer_id: string
     participants: string
     duration_hours: number
     instructor: string

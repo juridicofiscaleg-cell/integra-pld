@@ -1,21 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
 import { createTrainingSession, updateTrainingSession } from '../../lib/api'
-import type { TrainingModality, TrainingSession } from '../../lib/types'
+import type { Client, ClientComplianceOfficer, TrainingModality, TrainingSession } from '../../lib/types'
 import { TRAINING_MODALITY_LABELS } from '../../lib/types'
 
 interface TrainingFormModalProps {
   open: boolean
   session?: TrainingSession | null
+  clients: Client[]
+  officers: ClientComplianceOfficer[]
   onClose: () => void
   onSaved: (id?: string) => void
   userId?: string
 }
 
 const emptyForm = {
+  client_id: '',
+  officer_id: '',
   title: '',
   session_date: new Date().toISOString().slice(0, 10),
   topic: 'Capacitación PLD/FT',
@@ -27,14 +31,21 @@ const emptyForm = {
   notes: '',
 }
 
-export function TrainingFormModal({ open, session, onClose, onSaved, userId }: TrainingFormModalProps) {
+export function TrainingFormModal({ open, session, clients, officers, onClose, onSaved, userId }: TrainingFormModalProps) {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const clientOfficers = useMemo(
+    () => officers.filter((o) => o.client_id === form.client_id),
+    [officers, form.client_id],
+  )
+
   useEffect(() => {
     if (session) {
       setForm({
+        client_id: session.client_id ?? '',
+        officer_id: session.officer_id ?? '',
         title: session.title,
         session_date: session.session_date,
         topic: session.topic,
@@ -51,11 +62,24 @@ export function TrainingFormModal({ open, session, onClose, onSaved, userId }: T
     setError('')
   }, [session, open])
 
+  useEffect(() => {
+    if (!form.client_id) return
+    if (form.officer_id && clientOfficers.some((o) => o.id === form.officer_id)) return
+    const active = clientOfficers.find((o) => o.is_active)
+    if (active) setForm((f) => ({ ...f, officer_id: active.id }))
+  }, [form.client_id, clientOfficers, form.officer_id])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!form.client_id) {
+      setError('Selecciona el cliente al que corresponde la capacitación.')
+      return
+    }
     setSaving(true)
     setError('')
     const payload = {
+      client_id: form.client_id,
+      officer_id: form.officer_id || undefined,
       title: form.title.trim(),
       session_date: form.session_date,
       topic: form.topic.trim(),
@@ -90,6 +114,30 @@ export function TrainingFormModal({ open, session, onClose, onSaved, userId }: T
   return (
     <Modal open={open} onClose={onClose} title={session ? 'Editar capacitación' : 'Nueva capacitación PLD/FT'}>
       <form className="form-stack" onSubmit={handleSubmit}>
+        <Select
+          label="Cliente (sujeto obligado) *"
+          value={form.client_id}
+          onChange={(e) => setForm({ ...form, client_id: e.target.value, officer_id: '' })}
+          required
+        >
+          <option value="">Seleccionar cliente...</option>
+          {[...clients].sort((a, b) => a.name.localeCompare(b.name)).map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </Select>
+        <Select
+          label="Oficial de cumplimiento"
+          value={form.officer_id}
+          onChange={(e) => setForm({ ...form, officer_id: e.target.value })}
+          disabled={!form.client_id}
+        >
+          <option value="">Sin oficial / seleccionar...</option>
+          {clientOfficers.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}{o.is_active ? '' : ' (histórico)'}
+            </option>
+          ))}
+        </Select>
         <Input label="Título *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
         <div className="form-row">
           <Input label="Fecha *" type="date" value={form.session_date} onChange={(e) => setForm({ ...form, session_date: e.target.value })} required />
@@ -113,7 +161,7 @@ export function TrainingFormModal({ open, session, onClose, onSaved, userId }: T
             rows={4}
             value={form.participants}
             onChange={(e) => setForm({ ...form, participants: e.target.value })}
-            placeholder="Lic. Adrián Gerardo&#10;Lic. María Pérez"
+            placeholder="Nombre completo de cada asistente"
           />
         </div>
         <div className="form-field">

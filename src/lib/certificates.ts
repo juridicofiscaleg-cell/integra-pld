@@ -1,6 +1,10 @@
 import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js'
 import type { CertificateContext } from './certificate-template'
-import { buildCertificateHtml, defaultCertificateBody } from './certificate-template'
+import {
+  buildCertificateHtml,
+  defaultRecognitionLine,
+  serializeCertificateData,
+} from './certificate-template'
 import { isSupabaseConfigured, supabase } from './supabase'
 
 async function parseFunctionError(error: unknown): Promise<string> {
@@ -23,11 +27,12 @@ async function parseFunctionError(error: unknown): Promise<string> {
 export async function generateCertificateText(
   ctx: CertificateContext,
 ): Promise<{ text?: string; html?: string; source: 'ai' | 'template'; error?: string }> {
-  const templateBody = defaultCertificateBody(ctx)
-  const templateHtml = buildCertificateHtml(ctx, templateBody)
+  const fallbackLine = defaultRecognitionLine(ctx)
+  const fallbackStored = serializeCertificateData({ v: 2, recognitionLine: fallbackLine })
+  const fallbackHtml = buildCertificateHtml(ctx, fallbackStored)
 
   if (!isSupabaseConfigured || !supabase) {
-    return { text: templateBody, html: templateHtml, source: 'template' }
+    return { text: fallbackStored, html: fallbackHtml, source: 'template' }
   }
 
   try {
@@ -42,19 +47,26 @@ export async function generateCertificateText(
     if (error) {
       const msg = await parseFunctionError(error)
       if (/OPENAI|no configurada|fallback/i.test(msg)) {
-        return { text: templateBody, html: templateHtml, source: 'template' }
+        return { text: fallbackStored, html: fallbackHtml, source: 'template' }
       }
-      return { text: templateBody, html: templateHtml, source: 'template', error: msg }
+      return { text: fallbackStored, html: fallbackHtml, source: 'template', error: msg }
     }
 
-    const bodyText = typeof data?.bodyText === 'string' ? data.bodyText : templateBody
-    const html = buildCertificateHtml(ctx, bodyText)
+    const recognitionLine =
+      typeof data?.recognitionLine === 'string' && data.recognitionLine.trim()
+        ? data.recognitionLine.trim()
+        : typeof data?.bodyText === 'string' && data.bodyText.trim()
+          ? data.bodyText.trim().split('\n')[0].slice(0, 280)
+          : fallbackLine
+
+    const stored = serializeCertificateData({ v: 2, recognitionLine })
+    const html = buildCertificateHtml(ctx, stored)
     return {
-      text: bodyText,
+      text: stored,
       html,
       source: data?.source === 'ai' ? 'ai' : 'template',
     }
   } catch {
-    return { text: templateBody, html: templateHtml, source: 'template' }
+    return { text: fallbackStored, html: fallbackHtml, source: 'template' }
   }
 }

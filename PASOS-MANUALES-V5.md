@@ -7,6 +7,7 @@ Ejecuta en **SQL Editor**, en orden:
 1. `supabase/migration-v4.sql` (si no lo hiciste)
 2. `supabase/migration-v5.sql` — manual PLD, capacitaciones, comentarios, bucket `cumplimiento`
 3. `supabase/migration-v5b.sql` — ficha capacitaciones, constancias, datos del despacho
+4. `supabase/migration-v5c.sql` — **registro de oficiales por cliente** + vínculo capacitaciones
 
 ## 2. Edge Function constancias (opcional — IA)
 

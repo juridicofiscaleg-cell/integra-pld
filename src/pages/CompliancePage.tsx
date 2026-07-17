@@ -1,35 +1,28 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Download, GraduationCap, Plus, Shield } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { FilterBar } from '../components/ui/FilterBar'
 import { Input } from '../components/ui/Input'
-import { FirmProfileCard } from '../components/compliance/FirmProfileCard'
-import { OfficerProfileCard } from '../components/compliance/OfficerProfileCard'
+import { ComplianceOfficersSection } from '../components/compliance/ComplianceOfficersSection'
 import { TrainingDetailModal } from '../components/compliance/TrainingDetailModal'
 import { TrainingFormModal } from '../components/compliance/TrainingFormModal'
-import {
-  getComplianceManualUrl,
-  getComplianceOfficer,
-  getFirmProfile,
-  uploadComplianceManual,
-} from '../lib/api'
+import { getComplianceManualUrl, uploadComplianceManual } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
-import { useComplianceManuals, useTrainingSessions } from '../hooks/useData'
+import { useClients, useComplianceManuals, useComplianceOfficers, useTrainingSessions } from '../hooks/useData'
 import { exportTrainingsCsv } from '../lib/export'
-import type { ComplianceOfficer, FirmProfile, TrainingSession } from '../lib/types'
-import { TRAINING_MODALITY_LABELS } from '../lib/types'
+import type { TrainingSession } from '../lib/types'
 import { formatDate } from '../lib/utils'
 import { parseParticipants } from '../lib/certificate-template'
 
 export function CompliancePage() {
   const { user, profile } = useAuth()
+  const { clients } = useClients()
   const { manuals, refetch: refetchManuals } = useComplianceManuals()
-  const { sessions, loading, refetch: refetchSessions } = useTrainingSessions()
-  const [officer, setOfficer] = useState<ComplianceOfficer>({ name: '', email: '' })
-  const [officerUpdatedAt, setOfficerUpdatedAt] = useState<string>()
-  const [firm, setFirm] = useState<FirmProfile>({ name: '' })
-  const [pageError, setPageError] = useState('')
+  const { officers, loading: officersLoading, refetch: refetchOfficers, error: officersError } = useComplianceOfficers()
+  const { sessions, loading: sessionsLoading, refetch: refetchSessions } = useTrainingSessions()
+  const [officersPageError, setOfficersPageError] = useState('')
   const [manualTitle, setManualTitle] = useState('Manual PLD')
   const [manualVersion, setManualVersion] = useState('1.0')
   const [manualDate, setManualDate] = useState(new Date().toISOString().slice(0, 10))
@@ -37,6 +30,7 @@ export function CompliancePage() {
   const [manualUploading, setManualUploading] = useState(false)
   const [search, setSearch] = useState('')
   const [yearFilter, setYearFilter] = useState('')
+  const [clientFilter, setClientFilter] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [editSession, setEditSession] = useState<TrainingSession | null>(null)
   const [detailSession, setDetailSession] = useState<TrainingSession | null>(null)
@@ -45,17 +39,11 @@ export function CompliancePage() {
   const activeManual = manuals.find((m) => m.is_active)
   const currentYear = new Date().getFullYear()
   const sessionsThisYear = sessions.filter((s) => s.session_date.startsWith(String(currentYear)))
+  const activeOfficers = officers.filter((o) => o.is_active)
 
   useEffect(() => {
-    getComplianceOfficer().then(({ officer: o, updatedAt, error }) => {
-      if (o) setOfficer(o)
-      if (updatedAt) setOfficerUpdatedAt(updatedAt)
-      if (error) setPageError(error)
-    })
-    getFirmProfile().then(({ firm: f }) => {
-      if (f) setFirm(f)
-    })
-  }, [])
+    if (officersError) setOfficersPageError(officersError)
+  }, [officersError])
 
   useEffect(() => {
     if (detailSession) {
@@ -69,17 +57,19 @@ export function CompliancePage() {
     return [...set].sort((a, b) => b.localeCompare(a))
   }, [sessions])
 
-  const filtered = useMemo(() => {
+  const filteredSessions = useMemo(() => {
     return sessions.filter((s) => {
       const q = search.toLowerCase()
-      const haystack = [s.title, s.topic, s.participants, s.instructor].join(' ').toLowerCase()
+      const clientName = s.clients?.name ?? clients.find((c) => c.id === s.client_id)?.name ?? ''
+      const haystack = [s.title, s.topic, s.participants, s.instructor, clientName].join(' ').toLowerCase()
       if (search && !haystack.includes(q)) return false
       if (yearFilter && !s.session_date.startsWith(yearFilter)) return false
+      if (clientFilter && s.client_id !== clientFilter) return false
       return true
     })
-  }, [sessions, search, yearFilter])
+  }, [sessions, search, yearFilter, clientFilter, clients])
 
-  function openCreate() {
+  function openCreateTraining() {
     setEditSession(null)
     setFormOpen(true)
   }
@@ -97,16 +87,14 @@ export function CompliancePage() {
       <header className="page-header">
         <div>
           <h1>Cumplimiento PLD</h1>
-          <p>Oficial de cumplimiento, manual, capacitaciones y constancias — Arts. 52–54 LFPIORPI</p>
+          <p>Registro de oficiales por cliente, capacitaciones, diplomas y manual — Arts. 52–54 LFPIORPI</p>
         </div>
       </header>
-
-      {pageError && <p className="form-error compliance-banner">{pageError}</p>}
 
       <div className="compliance-stats">
         <div className="stat-chip">
           <Shield size={18} />
-          <span>{officer.name?.trim() ? 'Oficial designado' : 'Sin oficial'}</span>
+          <span>{activeOfficers.length} oficial(es) vigente(s)</span>
         </div>
         <div className="stat-chip">
           <GraduationCap size={18} />
@@ -117,20 +105,109 @@ export function CompliancePage() {
         </div>
       </div>
 
-      <div className="detail-grid compliance-top-grid">
-        <OfficerProfileCard
-          officer={officer}
-          savedAt={officerUpdatedAt}
-          onUpdated={(o) => {
-            setOfficer(o)
-            setOfficerUpdatedAt(new Date().toISOString())
-          }}
+      <ComplianceOfficersSection
+        officers={officers}
+        clients={clients}
+        loading={officersLoading}
+        canDelete={canDelete}
+        userId={user?.id}
+        onRefetch={refetchOfficers}
+        pageError={officersPageError}
+      />
+
+      <section className="card card-wide">
+        <div className="client-ops-header">
+          <div>
+            <h2>Historial de capacitaciones</h2>
+            <p className="card-desc">{filteredSessions.length} registro(s) · vinculadas a clientes · Art. 54</p>
+          </div>
+          <div className="header-actions">
+            <Button variant="secondary" onClick={() => exportTrainingsCsv(sessions, clients)} disabled={sessions.length === 0}>
+              <Download size={14} /> Export CSV
+            </Button>
+            <Button onClick={openCreateTraining}><Plus size={14} /> Nueva capacitación</Button>
+          </div>
+        </div>
+
+        <FilterBar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar capacitación, cliente, instructor..."
+          filters={[
+            {
+              label: 'Año',
+              value: yearFilter,
+              onChange: setYearFilter,
+              options: [{ value: '', label: 'Todos' }, ...years.map((y) => ({ value: y, label: y }))],
+            },
+            {
+              label: 'Cliente',
+              value: clientFilter,
+              onChange: setClientFilter,
+              options: [
+                { value: '', label: 'Todos' },
+                ...clients.map((c) => ({ value: c.id, label: c.name })),
+              ],
+            },
+          ]}
         />
-        <FirmProfileCard firm={firm} onUpdated={setFirm} />
-      </div>
+
+        {sessionsLoading ? (
+          <p className="loading">Cargando capacitaciones...</p>
+        ) : filteredSessions.length === 0 ? (
+          <div className="empty-state">
+            <h3>Sin capacitaciones registradas</h3>
+            <p>Registra cada sesión formativa por cliente para acreditar el cumplimiento del Art. 54.</p>
+            <Button onClick={openCreateTraining}><Plus size={16} /> Registrar capacitación</Button>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>Capacitación</th>
+                  <th>Tema</th>
+                  <th>Participantes</th>
+                  <th>Diploma</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSessions.map((s) => {
+                  const count = parseParticipants(s.participants).length
+                  const clientName = s.clients?.name ?? clients.find((c) => c.id === s.client_id)?.name
+                  return (
+                    <tr key={s.id} className="clickable-row" onClick={() => setDetailSession(s)}>
+                      <td>{formatDate(s.session_date)}</td>
+                      <td>
+                        {s.client_id ? (
+                          <Link to={`/clientes/${s.client_id}`} onClick={(e) => e.stopPropagation()}>
+                            {clientName ?? '—'}
+                          </Link>
+                        ) : '—'}
+                      </td>
+                      <td><strong>{s.title}</strong></td>
+                      <td>{s.topic}</td>
+                      <td>{count > 0 ? count : '—'}</td>
+                      <td>
+                        {s.certificate_text
+                          ? <Badge variant="success">Generado</Badge>
+                          : <Badge variant="warning">Pendiente</Badge>}
+                      </td>
+                      <td><Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDetailSession(s) }}>Ver ficha</Button></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="card">
-        <h2>Manual PLD</h2>
+        <h2>Manual PLD (despacho)</h2>
         {activeManual ? (
           <div className="manual-active">
             <div>
@@ -149,21 +226,6 @@ export function CompliancePage() {
         ) : (
           <p className="empty-state compact">Sin manual cargado</p>
         )}
-
-        {manuals.length > 1 && (
-          <div className="manual-history">
-            <h3>Historial de versiones</h3>
-            <div className="mini-list">
-              {manuals.filter((m) => !m.is_active).map((m) => (
-                <div key={m.id} className="mini-list-item">
-                  <strong>{m.title}</strong>
-                  <span>v{m.version} · {formatDate(m.effective_date)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="form-stack manual-upload">
           <h3>Subir nueva versión</h3>
           <div className="form-row">
@@ -196,84 +258,11 @@ export function CompliancePage() {
         </div>
       </section>
 
-      <section className="card card-wide">
-        <div className="client-ops-header">
-          <div>
-            <h2>Historial de capacitaciones</h2>
-            <p className="card-desc">{filtered.length} registro(s) · base de cumplimiento Art. 54</p>
-          </div>
-          <div className="header-actions">
-            <Button variant="secondary" onClick={() => exportTrainingsCsv(sessions)} disabled={sessions.length === 0}>
-              <Download size={14} /> Export CSV
-            </Button>
-            <Button onClick={openCreate}><Plus size={14} /> Nueva capacitación</Button>
-          </div>
-        </div>
-
-        <FilterBar
-          search={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Buscar por título, tema, instructor o participante..."
-          filters={[
-            {
-              label: 'Año',
-              value: yearFilter,
-              onChange: setYearFilter,
-              options: [{ value: '', label: 'Todos' }, ...years.map((y) => ({ value: y, label: y }))],
-            },
-          ]}
-        />
-
-        {loading ? (
-          <p className="loading">Cargando capacitaciones...</p>
-        ) : filtered.length === 0 ? (
-          <div className="empty-state">
-            <h3>Sin capacitaciones registradas</h3>
-            <p>Registra cada sesión formativa para acreditar el cumplimiento del Art. 54 LFPIORPI.</p>
-            <Button onClick={openCreate}><Plus size={16} /> Registrar primera capacitación</Button>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Capacitación</th>
-                  <th>Tema</th>
-                  <th>Participantes</th>
-                  <th>Modalidad</th>
-                  <th>Constancia</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((s) => {
-                  const count = parseParticipants(s.participants).length
-                  return (
-                    <tr key={s.id} className="clickable-row" onClick={() => setDetailSession(s)}>
-                      <td>{formatDate(s.session_date)}</td>
-                      <td><strong>{s.title}</strong></td>
-                      <td>{s.topic}</td>
-                      <td>{count > 0 ? count : '—'}</td>
-                      <td>{s.modality ? TRAINING_MODALITY_LABELS[s.modality as keyof typeof TRAINING_MODALITY_LABELS] ?? s.modality : '—'}</td>
-                      <td>
-                        {s.certificate_text
-                          ? <Badge variant="success">Generada</Badge>
-                          : <Badge variant="warning">Pendiente</Badge>}
-                      </td>
-                      <td><Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDetailSession(s) }}>Ver ficha</Button></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
       <TrainingFormModal
         open={formOpen}
         session={editSession}
+        clients={clients}
+        officers={officers}
         onClose={() => { setFormOpen(false); setEditSession(null) }}
         onSaved={handleSaved}
         userId={user?.id}
@@ -281,8 +270,8 @@ export function CompliancePage() {
 
       <TrainingDetailModal
         session={detailSession}
-        officer={officer}
-        firm={firm}
+        clients={clients}
+        officers={officers}
         canDelete={canDelete}
         onClose={() => setDetailSession(null)}
         onEdit={(s) => { setDetailSession(null); setEditSession(s); setFormOpen(true) }}
