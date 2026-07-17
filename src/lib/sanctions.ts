@@ -1,5 +1,23 @@
+import { FunctionsFetchError, FunctionsHttpError, FunctionsRelayError } from '@supabase/supabase-js'
 import type { ClientType, SanctionsResult } from './types'
 import { isSupabaseConfigured, supabase } from './supabase'
+
+async function parseFunctionError(error: unknown): Promise<string> {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const body = await error.context.json()
+      if (body?.error) return String(body.error)
+    } catch {
+      /* response body not json */
+    }
+    return error.message
+  }
+  if (error instanceof FunctionsRelayError || error instanceof FunctionsFetchError) {
+    return error.message
+  }
+  if (error instanceof Error) return error.message
+  return 'Error desconocido al consultar listas'
+}
 
 async function runSimulatedCheck(_clientName: string, _rfc?: string): Promise<SanctionsResult[]> {
   await new Promise((r) => setTimeout(r, 300))
@@ -47,9 +65,8 @@ export async function runSanctionsCheck(
   })
 
   if (error) {
-    throw new Error(
-      `No se pudo consultar listas: ${error.message}. Despliega la Edge Function "sanctions-check" y configura OPENSANCTIONS_API_KEY en Supabase.`,
-    )
+    const detail = await parseFunctionError(error)
+    throw new Error(detail)
   }
 
   if (data?.error) {
