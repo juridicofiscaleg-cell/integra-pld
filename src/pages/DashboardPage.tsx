@@ -1,12 +1,25 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Calendar, FileCheck, FolderOpen, Users } from 'lucide-react'
+import { AlertTriangle, Calendar, FileCheck, FolderOpen, GraduationCap, Shield, Users } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { useAuth } from '../context/AuthContext'
-import { useActivity, useAlerts, useClients, useExpedientes, useKycRecords, usePldOperations, useProfiles, useUnusualNotices } from '../hooks/useData'
+import {
+  useActivity,
+  useAlerts,
+  useClients,
+  useComplianceManuals,
+  useComplianceOfficers,
+  useExpedientes,
+  useKycRecords,
+  usePldOperations,
+  useProfiles,
+  useTrainingSessions,
+  useUnusualNotices,
+} from '../hooks/useData'
+import { getClientCompliance } from '../lib/compliance'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { getProgressPercent, getWorkflowStages } from '../lib/workflows'
 import { formatDate, formatRelative } from '../lib/utils'
-import { differenceInDays, parseISO } from 'date-fns'
+import { differenceInDays, differenceInHours, parseISO, subMonths } from 'date-fns'
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -17,6 +30,9 @@ export function DashboardPage() {
   const { activity } = useActivity()
   const { operations } = usePldOperations()
   const { notices } = useUnusualNotices()
+  const { officers } = useComplianceOfficers()
+  const { manuals } = useComplianceManuals()
+  const { sessions: trainings } = useTrainingSessions()
   const { profiles } = useProfiles()
 
   const profileName = profiles.find((p) => p.id === user?.id)
@@ -35,13 +51,32 @@ export function DashboardPage() {
   )
   const opsUnreported = operations.filter((o) => o.unusual && !o.reported)
   const noticesDraft = notices.filter((n) => n.status === 'borrador')
+  const h24Urgent = notices.filter((n) => n.notice_type === '24h' && n.status === 'borrador' && differenceInHours(new Date(), parseISO(n.detected_at)) >= 12)
   const vulnerableClients = clients.filter((c) => c.vulnerable_activity)
+  const yearAgo = subMonths(new Date(), 12)
+
+  const complianceIssues = clients
+    .map((c) => ({
+      client: c,
+      summary: getClientCompliance(c, kycRecords, expedientes, alerts, operations, notices, officers, manuals, trainings),
+    }))
+    .filter(({ summary }) => summary.status !== 'verde')
+
+  const missingOfficer = vulnerableClients.filter(
+    (c) => !officers.some((o) => o.client_id === c.id && o.is_active),
+  )
+  const missingManual = vulnerableClients.filter(
+    (c) => !manuals.some((m) => m.client_id === c.id && m.is_active),
+  )
+  const missingTraining = vulnerableClients.filter(
+    (c) => !trainings.some((t) => t.client_id === c.id && parseISO(t.session_date) >= yearAgo),
+  )
 
   const stats = [
     { label: 'Clientes', value: clients.length, icon: Users, to: '/clientes' },
     { label: 'Expedientes activos', value: activeExpedientes.length, icon: FolderOpen, to: '/expedientes' },
     { label: 'KYC pendientes', value: pendingKyc.length, icon: FileCheck, to: '/kyc' },
-    { label: 'Alertas', value: alerts.length, icon: AlertTriangle, to: '/alertas' },
+    { label: 'Alertas', value: alerts.filter((a) => !a.resolved).length, icon: AlertTriangle, to: '/alertas' },
   ]
 
   return (
@@ -68,6 +103,41 @@ export function DashboardPage() {
         ))}
       </div>
 
+      <section className="card card-wide">
+        <h2>Cumplimiento PLD (Arts. 52–54)</h2>
+        <div className="compliance-stats">
+          <Link to="/cumplimiento" className="stat-chip">
+            <Shield size={18} />
+            <span>{missingOfficer.length} sin oficial</span>
+          </Link>
+          <Link to="/cumplimiento" className="stat-chip">
+            <GraduationCap size={18} />
+            <span>{missingTraining.length} sin capacitación 12m</span>
+          </Link>
+          <Link to="/operaciones" className="stat-chip">
+            <AlertTriangle size={18} />
+            <span>{h24Urgent.length} avisos 24h urgentes</span>
+          </Link>
+          <Link to="/clientes" className="stat-chip">
+            <span>{complianceIssues.filter((x) => x.summary.status === 'rojo').length} clientes en rojo</span>
+          </Link>
+        </div>
+        {complianceIssues.length > 0 && (
+          <div className="mini-list" style={{ marginTop: '1rem' }}>
+            {complianceIssues.slice(0, 5).map(({ client, summary }) => (
+              <Link key={client.id} to={`/clientes/${client.id}`} className="mini-list-item">
+                <strong>{client.name}</strong>
+                <Badge variant={summary.status === 'rojo' ? 'danger' : 'warning'}>{summary.label}</Badge>
+                <span>{summary.issues[0]}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+        {missingManual.length > 0 && (
+          <p className="dashboard-note">{missingManual.length} cliente(s) vulnerable(s) sin manual PLD vigente</p>
+        )}
+      </section>
+
       <section className="card card-wide my-day-section">
         <h2>Mi día</h2>
         <div className="my-day-grid">
@@ -90,10 +160,10 @@ export function DashboardPage() {
               <p className="empty-state">Sin alertas asignadas</p>
             ) : (
               myAlerts.slice(0, 5).map((a) => (
-                <div key={a.id} className="mini-list-item">
+                <Link key={a.id} to={a.client_id ? `/clientes/${a.client_id}` : '/alertas'} className="mini-list-item">
                   <strong>{a.title}</strong>
                   {a.due_date && <span>Vence {formatDate(a.due_date)}</span>}
-                </div>
+                </Link>
               ))
             )}
           </div>
@@ -128,6 +198,12 @@ export function DashboardPage() {
                   <Link key={n.id} to="/operaciones" className="mini-list-item">
                     <strong>Aviso borrador</strong>
                     <span>{n.title}</span>
+                  </Link>
+                ))}
+                {h24Urgent.slice(0, 2).map((n) => (
+                  <Link key={n.id} to="/operaciones" className="mini-list-item">
+                    <strong>Aviso 24h urgente</strong>
+                    <span>{n.clients?.name}</span>
                   </Link>
                 ))}
               </>
@@ -177,12 +253,12 @@ export function DashboardPage() {
 
         <section className="card">
           <h2>Alertas pendientes</h2>
-          {alerts.length === 0 ? (
+          {alerts.filter((a) => !a.resolved).length === 0 ? (
             <p className="empty-state">Sin alertas pendientes</p>
           ) : (
             <div className="alert-list">
-              {alerts.map((alert) => (
-                <div key={alert.id} className="alert-row">
+              {alerts.filter((a) => !a.resolved).map((alert) => (
+                <Link key={alert.id} to={alert.client_id ? `/clientes/${alert.client_id}` : '/alertas'} className="alert-row">
                   <AlertTriangle size={16} className="alert-icon" />
                   <div>
                     <strong>{alert.title}</strong>
@@ -191,7 +267,7 @@ export function DashboardPage() {
                       <span className="alert-due">Vence: {formatDate(alert.due_date)}</span>
                     )}
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
-import { useAlerts, useExpedientes, useKycRecords } from '../hooks/useData'
+import { useAlerts, useClients, useExpedientes, useKycRecords, useTrainingSessions, useUnusualNotices } from '../hooks/useData'
 import { formatDate, isOverdue } from '../lib/utils'
 import {
   addMonths,
+  addYears,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -16,6 +17,7 @@ import {
   parseISO,
   startOfMonth,
   startOfWeek,
+  subMonths,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -23,7 +25,7 @@ interface CalendarEvent {
   id: string
   date: string
   title: string
-  type: 'kyc' | 'alerta' | 'expediente'
+  type: 'kyc' | 'alerta' | 'expediente' | 'capacitacion' | 'aviso24h'
   link?: string
   urgent?: boolean
 }
@@ -33,6 +35,9 @@ export function CalendarPage() {
   const { records: kycRecords } = useKycRecords()
   const { alerts } = useAlerts()
   const { expedientes } = useExpedientes()
+  const { sessions: trainings } = useTrainingSessions()
+  const { notices } = useUnusualNotices()
+  const { clients } = useClients()
 
   const events = useMemo(() => {
     const list: CalendarEvent[] = []
@@ -69,8 +74,54 @@ export function CalendarPage() {
         link: `/expedientes/${e.id}`,
       })
     }
+    for (const t of trainings) {
+      list.push({
+        id: `train-${t.id}`,
+        date: t.session_date,
+        title: `Capacitación: ${t.title}`,
+        type: 'capacitacion',
+        link: t.client_id ? `/cumplimiento?capacitacion=${t.id}` : '/cumplimiento',
+      })
+      const nextAnnual = addYears(parseISO(t.session_date), 1)
+      list.push({
+        id: `train-renew-${t.id}`,
+        date: format(nextAnnual, 'yyyy-MM-dd'),
+        title: `Renovar capacitación: ${t.clients?.name ?? t.title}`,
+        type: 'capacitacion',
+        link: t.client_id ? `/cumplimiento?cliente=${t.client_id}&accion=capacitacion` : '/cumplimiento',
+        urgent: nextAnnual <= new Date(),
+      })
+    }
+    for (const n of notices.filter((x) => x.notice_type === '24h' && x.status === 'borrador')) {
+      list.push({
+        id: `notice24-${n.id}`,
+        date: n.detected_at.slice(0, 10),
+        title: `Aviso 24h: ${n.title}`,
+        type: 'aviso24h',
+        link: '/operaciones',
+        urgent: true,
+      })
+    }
+    for (const c of clients.filter((x) => x.vulnerable_activity)) {
+      const lastTraining = trainings
+        .filter((t) => t.client_id === c.id)
+        .sort((a, b) => b.session_date.localeCompare(a.session_date))[0]
+      const dueDate = lastTraining
+        ? format(addYears(parseISO(lastTraining.session_date), 1), 'yyyy-MM-dd')
+        : format(subMonths(new Date(), 11), 'yyyy-MM-dd')
+      if (!lastTraining || parseISO(dueDate) <= addMonths(new Date(), 1)) {
+        list.push({
+          id: `train-due-${c.id}`,
+          date: dueDate,
+          title: `Capacitación anual: ${c.name}`,
+          type: 'capacitacion',
+          link: `/cumplimiento?cliente=${c.id}&accion=capacitacion`,
+          urgent: parseISO(dueDate) < new Date(),
+        })
+      }
+    }
     return list
-  }, [kycRecords, alerts, expedientes])
+  }, [kycRecords, alerts, expedientes, trainings, notices, clients])
 
   const monthStart = startOfMonth(current)
   const monthEnd = endOfMonth(current)
@@ -80,12 +131,20 @@ export function CalendarPage() {
 
   const selectedDayEvents = events.filter((e) => isSameDay(parseISO(e.date), current))
 
+  const typeLabel: Record<CalendarEvent['type'], string> = {
+    kyc: 'KYC',
+    alerta: 'Alerta',
+    expediente: 'Expediente',
+    capacitacion: 'Capacitación',
+    aviso24h: 'Aviso 24h',
+  }
+
   return (
     <div className="page">
       <header className="page-header">
         <div>
           <h1>Calendario de vencimientos</h1>
-          <p>KYC, alertas y plazos del despacho</p>
+          <p>KYC, alertas, capacitaciones PLD y plazos Art. 21</p>
         </div>
         <div className="header-actions">
           <Button variant="secondary" onClick={() => setCurrent(addMonths(current, -1))}>
@@ -135,8 +194,8 @@ export function CalendarPage() {
                 ) : (
                   <strong>{ev.title}</strong>
                 )}
-                <Badge variant={ev.type === 'kyc' ? 'warning' : ev.type === 'alerta' ? 'danger' : 'info'}>
-                  {ev.type}
+                <Badge variant={ev.urgent ? 'danger' : ev.type === 'kyc' ? 'warning' : ev.type === 'aviso24h' ? 'danger' : 'info'}>
+                  {typeLabel[ev.type]}
                 </Badge>
                 <span>{formatDate(ev.date)}</span>
               </div>

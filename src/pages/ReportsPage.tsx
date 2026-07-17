@@ -1,18 +1,34 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Download, FileSpreadsheet, Printer } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import {
   exportActivityCsv,
   exportClientsCsv,
   exportExpedientesCsv,
   exportKycCsv,
+  exportManualsCsv,
   exportNoticesCsv,
+  exportOfficersCsv,
   exportOperationsCsv,
+  exportTrainingsCsv,
+  filterByDateRange,
   printReport,
 } from '../lib/export'
-import { useActivity, useClients, useExpedientes, useKycRecords, usePldOperations, useUnusualNotices } from '../hooks/useData'
+import {
+  useActivity,
+  useClients,
+  useComplianceManuals,
+  useComplianceOfficers,
+  useExpedientes,
+  useKycRecords,
+  usePldOperations,
+  useTrainingSessions,
+  useUnusualNotices,
+} from '../hooks/useData'
+import { effectiveRiskLevel } from '../lib/client-risk'
 import { KYC_STATUS_LABELS, RISK_LABELS, STATUS_LABELS } from '../lib/types'
 
 export function ReportsPage() {
@@ -22,27 +38,55 @@ export function ReportsPage() {
   const { activity } = useActivity()
   const { operations } = usePldOperations()
   const { notices } = useUnusualNotices()
+  const { officers } = useComplianceOfficers()
+  const { manuals } = useComplianceManuals()
+  const { sessions: trainings } = useTrainingSessions()
   const [riskFilter, setRiskFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   const filteredClients = riskFilter
-    ? clients.filter((c) => c.risk_level === riskFilter)
+    ? clients.filter((c) => effectiveRiskLevel(c) === riskFilter)
     : clients
 
   const filteredExpedientes = statusFilter
     ? expedientes.filter((e) => e.status === statusFilter)
     : expedientes
 
+  const filteredOps = useMemo(
+    () => filterByDateRange(operations, 'operation_date', dateFrom, dateTo),
+    [operations, dateFrom, dateTo],
+  )
+  const filteredNotices = useMemo(
+    () => filterByDateRange(notices, 'detected_at', dateFrom, dateTo),
+    [notices, dateFrom, dateTo],
+  )
+  const filteredTrainings = useMemo(
+    () => filterByDateRange(trainings, 'session_date', dateFrom, dateTo),
+    [trainings, dateFrom, dateTo],
+  )
+  const filteredActivity = useMemo(
+    () => filterByDateRange(activity, 'created_at', dateFrom, dateTo),
+    [activity, dateFrom, dateTo],
+  )
+
   const stats = {
     totalClients: clients.length,
     vulnerable: clients.filter((c) => c.vulnerable_activity).length,
-    highRisk: clients.filter((c) => c.risk_level === 'alto' || c.risk_level === 'critico').length,
+    highRisk: clients.filter((c) => {
+      const r = effectiveRiskLevel(c)
+      return r === 'alto' || r === 'critico'
+    }).length,
     activeExp: expedientes.filter((e) => e.status === 'activo').length,
     kycPending: kycRecords.filter((k) => k.status === 'pendiente' || k.status === 'en_revision').length,
     kycExpired: kycRecords.filter((k) => k.status === 'vencido').length,
     pep: kycRecords.filter((k) => k.pep).length,
     opsUnreported: operations.filter((o) => o.unusual && !o.reported).length,
     noticesDraft: notices.filter((n) => n.status === 'borrador').length,
+    officersActive: officers.filter((o) => o.is_active).length,
+    manualsActive: manuals.filter((m) => m.is_active).length,
+    trainingsYear: trainings.filter((t) => t.session_date.startsWith(String(new Date().getFullYear()))).length,
   }
 
   return (
@@ -58,6 +102,14 @@ export function ReportsPage() {
       </header>
 
       <section className="card">
+        <h2>Filtro por fechas (operaciones, avisos, capacitaciones, bitácora)</h2>
+        <div className="form-row">
+          <Input label="Desde" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input label="Hasta" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+        </div>
+      </section>
+
+      <section className="card">
         <h2>Panel de cumplimiento</h2>
         <div className="exec-summary">
           <div><span className="exec-value">{stats.totalClients}</span><span>Clientes</span></div>
@@ -69,6 +121,9 @@ export function ReportsPage() {
           <div><span className="exec-value">{stats.pep}</span><span>PEP</span></div>
           <div><span className="exec-value">{stats.opsUnreported}</span><span>Ops. sin reportar</span></div>
           <div><span className="exec-value">{stats.noticesDraft}</span><span>Avisos borrador</span></div>
+          <div><span className="exec-value">{stats.officersActive}</span><span>Oficiales vigentes</span></div>
+          <div><span className="exec-value">{stats.manualsActive}</span><span>Manuales vigentes</span></div>
+          <div><span className="exec-value">{stats.trainingsYear}</span><span>Capacitaciones {new Date().getFullYear()}</span></div>
         </div>
       </section>
 
@@ -115,8 +170,8 @@ export function ReportsPage() {
         <section className="card report-card">
           <FileSpreadsheet size={28} />
           <h2>Operaciones PLD</h2>
-          <p>{operations.length} registros</p>
-          <Button onClick={() => exportOperationsCsv(operations)} disabled={operations.length === 0}>
+          <p>{filteredOps.length} registros{dateFrom || dateTo ? ' (filtrados)' : ''}</p>
+          <Button onClick={() => exportOperationsCsv(filteredOps)} disabled={filteredOps.length === 0}>
             <Download size={16} /> Exportar CSV
           </Button>
         </section>
@@ -124,8 +179,35 @@ export function ReportsPage() {
         <section className="card report-card">
           <FileSpreadsheet size={28} />
           <h2>Avisos Art. 21</h2>
-          <p>{notices.length} avisos</p>
-          <Button onClick={() => exportNoticesCsv(notices)} disabled={notices.length === 0}>
+          <p>{filteredNotices.length} avisos{dateFrom || dateTo ? ' (filtrados)' : ''}</p>
+          <Button onClick={() => exportNoticesCsv(filteredNotices)} disabled={filteredNotices.length === 0}>
+            <Download size={16} /> Exportar CSV
+          </Button>
+        </section>
+
+        <section className="card report-card">
+          <FileSpreadsheet size={28} />
+          <h2>Oficiales de cumplimiento</h2>
+          <p>{officers.length} registros</p>
+          <Button onClick={() => exportOfficersCsv(officers)} disabled={officers.length === 0}>
+            <Download size={16} /> Exportar CSV
+          </Button>
+        </section>
+
+        <section className="card report-card">
+          <FileSpreadsheet size={28} />
+          <h2>Manuales PLD</h2>
+          <p>{manuals.length} versiones</p>
+          <Button onClick={() => exportManualsCsv(manuals)} disabled={manuals.length === 0}>
+            <Download size={16} /> Exportar CSV
+          </Button>
+        </section>
+
+        <section className="card report-card">
+          <FileSpreadsheet size={28} />
+          <h2>Capacitaciones</h2>
+          <p>{filteredTrainings.length} registros{dateFrom || dateTo ? ' (filtrados)' : ''}</p>
+          <Button onClick={() => exportTrainingsCsv(filteredTrainings, clients)} disabled={filteredTrainings.length === 0}>
             <Download size={16} /> Exportar CSV
           </Button>
         </section>
@@ -133,8 +215,8 @@ export function ReportsPage() {
         <section className="card report-card">
           <FileSpreadsheet size={28} />
           <h2>Bitácora de auditoría</h2>
-          <p>{activity.length} eventos recientes — trazabilidad SRA/PLD</p>
-          <Button onClick={() => exportActivityCsv(activity)} disabled={activity.length === 0}>
+          <p>{filteredActivity.length} eventos{dateFrom || dateTo ? ' (filtrados)' : ''}</p>
+          <Button onClick={() => exportActivityCsv(filteredActivity)} disabled={filteredActivity.length === 0}>
             <Download size={16} /> Exportar CSV
           </Button>
         </section>

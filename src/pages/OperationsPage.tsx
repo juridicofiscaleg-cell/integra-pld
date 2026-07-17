@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -8,7 +8,7 @@ import { Modal } from '../components/ui/Modal'
 import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
-import { createPldOperation, createUnusualNotice, deletePldOperation } from '../lib/api'
+import { createPldOperation, createUnusualNotice, deletePldOperation, deleteUnusualNotice } from '../lib/api'
 import { classifyOperation, getThresholdForActivity } from '../lib/sat-thresholds'
 import { EditNoticeModal } from '../components/operations/EditNoticeModal'
 import { EditOperationModal } from '../components/operations/EditOperationModal'
@@ -27,8 +27,11 @@ import {
   type NoticeType,
 } from '../lib/types'
 import { formatDate } from '../lib/utils'
+import { canDelete as roleCanDelete, canWrite } from '../lib/permissions'
 
 export function OperationsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const prefilledClient = searchParams.get('cliente') ?? ''
   const { user, profile } = useAuth()
   const { clients } = useClients()
   const { expedientes } = useExpedientes()
@@ -38,13 +41,30 @@ export function OperationsPage() {
   const [tab, setTab] = useState<'operaciones' | 'avisos'>('operaciones')
   const [search, setSearch] = useState('')
   const [filterUnusual, setFilterUnusual] = useState('all')
+  const [filterNoticeType, setFilterNoticeType] = useState('all')
+  const [filterNoticeStatus, setFilterNoticeStatus] = useState('all')
   const [opModal, setOpModal] = useState(false)
   const [noticeModal, setNoticeModal] = useState(false)
   const [deleteOpId, setDeleteOpId] = useState<string | null>(null)
   const [editOp, setEditOp] = useState<(typeof operations)[0] | null>(null)
   const [editNotice, setEditNotice] = useState<(typeof notices)[0] | null>(null)
+  const [deleteNoticeId, setDeleteNoticeId] = useState<string | null>(null)
+  const [initialClientId, setInitialClientId] = useState('')
 
-  const canDelete = profile?.role !== 'asistente'
+  const canDelete = roleCanDelete(profile?.role)
+  const canEdit = canWrite(profile?.role)
+
+  useEffect(() => {
+    if (prefilledClient) {
+      setInitialClientId(prefilledClient)
+      setOpModal(true)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('cliente')
+        return next
+      }, { replace: true })
+    }
+  }, [prefilledClient, setSearchParams])
 
   const filteredOps = operations.filter((o) => {
     const name = o.clients?.name?.toLowerCase() ?? ''
@@ -58,8 +78,15 @@ export function OperationsPage() {
 
   const filteredNotices = notices.filter((n) => {
     const name = n.clients?.name?.toLowerCase() ?? ''
-    return !search || name.includes(search.toLowerCase()) || n.title.toLowerCase().includes(search.toLowerCase())
+    if (search && !name.includes(search.toLowerCase()) && !n.title.toLowerCase().includes(search.toLowerCase())) {
+      return false
+    }
+    if (filterNoticeType !== 'all' && n.notice_type !== filterNoticeType) return false
+    if (filterNoticeStatus !== 'all' && n.status !== filterNoticeStatus) return false
+    return true
   })
+
+  const h24Urgent = notices.filter((n) => n.notice_type === '24h' && n.status === 'borrador')
 
   return (
     <div className="page">
@@ -69,14 +96,25 @@ export function OperationsPage() {
           <p>Registro de operaciones y avisos inusuales / relevantes (Art. 21 LFPIORPI)</p>
         </div>
         <div className="header-actions">
-          <Button variant="secondary" onClick={() => setNoticeModal(true)}>
-            <Plus size={16} /> Nuevo aviso
-          </Button>
-          <Button onClick={() => setOpModal(true)}>
-            <Plus size={16} /> Registrar operación
-          </Button>
+          {canEdit && (
+            <>
+              <Button variant="secondary" onClick={() => setNoticeModal(true)}>
+                <Plus size={16} /> Nuevo aviso
+              </Button>
+              <Button onClick={() => setOpModal(true)}>
+                <Plus size={16} /> Registrar operación
+              </Button>
+            </>
+          )}
         </div>
       </header>
+
+      {h24Urgent.length > 0 && (
+        <div className="form-error compliance-banner">
+          <strong>{h24Urgent.length} aviso(s) 24h en borrador</strong>
+          <p>Revisa el plazo de presentación conforme al Art. 21 LFPIORPI.</p>
+        </div>
+      )}
 
       <div className="tab-row">
         <button type="button" className={`tab ${tab === 'operaciones' ? 'active' : ''}`} onClick={() => setTab('operaciones')}>
@@ -103,7 +141,26 @@ export function OperationsPage() {
                   { value: 'normal', label: 'Normales' },
                 ],
               }]
-            : []
+            : [
+                {
+                  label: 'Tipo aviso',
+                  value: filterNoticeType,
+                  onChange: setFilterNoticeType,
+                  options: [
+                    { value: 'all', label: 'Todos' },
+                    ...Object.entries(NOTICE_TYPE_LABELS).map(([k, v]) => ({ value: k, label: v })),
+                  ],
+                },
+                {
+                  label: 'Estado',
+                  value: filterNoticeStatus,
+                  onChange: setFilterNoticeStatus,
+                  options: [
+                    { value: 'all', label: 'Todos' },
+                    ...Object.entries(NOTICE_STATUS_LABELS).map(([k, v]) => ({ value: k, label: v })),
+                  ],
+                },
+              ]
         }
       />
 
@@ -166,8 +223,18 @@ export function OperationsPage() {
                 {n.narrative && <p>{n.narrative}</p>}
                 <Link to={`/clientes/${n.client_id}`}>{n.clients?.name}</Link>
                 <span> · Detectado {formatDate(n.detected_at)}</span>
+                {n.operation_id && (
+                  <span> · <Link to="/operaciones">Vinculada a operación</Link></span>
+                )}
               </div>
-              <Button variant="secondary" onClick={() => setEditNotice(n)}><Pencil size={14} /> Editar</Button>
+              <div className="row-actions">
+                {canEdit && (
+                  <Button variant="secondary" onClick={() => setEditNotice(n)}><Pencil size={14} /> Editar</Button>
+                )}
+                {canDelete && (
+                  <Button variant="danger" onClick={() => setDeleteNoticeId(n.id)}><Trash2 size={14} /></Button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -177,7 +244,8 @@ export function OperationsPage() {
         open={opModal}
         clients={clients}
         expedientes={expedientes}
-        onClose={() => setOpModal(false)}
+        initialClientId={initialClientId}
+        onClose={() => { setOpModal(false); setInitialClientId('') }}
         onCreated={() => { setOpModal(false); refetchOps(); refetchNotices() }}
         userId={user?.id}
         refetchNotices={refetchNotices}
@@ -208,6 +276,20 @@ export function OperationsPage() {
 
       <EditOperationModal operation={editOp} onClose={() => setEditOp(null)} onUpdated={() => { setEditOp(null); refetchOps() }} />
       <EditNoticeModal notice={editNotice} onClose={() => setEditNotice(null)} onUpdated={() => { setEditNotice(null); refetchNotices() }} />
+
+      <ConfirmDialog
+        open={!!deleteNoticeId}
+        title="Eliminar aviso"
+        message="¿Eliminar este aviso PLD?"
+        confirmLabel="Eliminar"
+        danger
+        onConfirm={async () => {
+          if (deleteNoticeId) await deleteUnusualNotice(deleteNoticeId)
+          setDeleteNoticeId(null)
+          refetchNotices()
+        }}
+        onCancel={() => setDeleteNoticeId(null)}
+      />
     </div>
   )
 }
@@ -216,6 +298,7 @@ function OperationModal({
   open,
   clients,
   expedientes,
+  initialClientId,
   onClose,
   onCreated,
   userId,
@@ -224,6 +307,7 @@ function OperationModal({
   open: boolean
   clients: ReturnType<typeof useClients>['clients']
   expedientes: ReturnType<typeof useExpedientes>['expedientes']
+  initialClientId?: string
   onClose: () => void
   onCreated: () => void
   userId?: string
@@ -240,9 +324,17 @@ function OperationModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (open && initialClientId) setClientId(initialClientId)
+  }, [open, initialClientId])
+
   const selectedClient = clients.find((c) => c.id === clientId)
-  const thresholdHint = selectedClient ? getThresholdForActivity(selectedClient.industry) : null
-  const classification = classifyOperation(amount ? Number(amount) : undefined, selectedClient?.industry)
+  const thresholdHint = selectedClient ? getThresholdForActivity(selectedClient.industry, selectedClient.activity_code) : null
+  const classification = classifyOperation(
+    amount ? Number(amount) : undefined,
+    selectedClient?.industry,
+    selectedClient?.activity_code,
+  )
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()

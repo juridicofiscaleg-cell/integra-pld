@@ -3,7 +3,7 @@ import { Download, FileText, Pencil, Printer, Sparkles, Trash2 } from 'lucide-re
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
-import { deleteTrainingSession, saveTrainingCertificate } from '../../lib/api'
+import { deleteTrainingSession, getTrainingEvidenceUrl, saveTrainingCertificate } from '../../lib/api'
 import { generateCertificateText } from '../../lib/certificates'
 import { resolveCertificateContext } from '../../lib/compliance-officers'
 import {
@@ -166,6 +166,18 @@ export function TrainingDetailModal({
           <div className="training-notes-block">
             <h4>Contenido / notas</h4>
             <p>{session.notes}</p>
+          </div>
+        )}
+
+        {session.evidence_path && (
+          <div className="training-notes-block">
+            <h4>Evidencia de asistencia</h4>
+            <Button size="sm" variant="secondary" onClick={async () => {
+              const url = await getTrainingEvidenceUrl(session.evidence_path!)
+              if (url) window.open(url, '_blank')
+            }}>
+              <Download size={14} /> Descargar evidencia
+            </Button>
           </div>
         )}
 

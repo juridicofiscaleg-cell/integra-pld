@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '../ui/Badge'
@@ -15,6 +15,10 @@ interface ComplianceOfficersSectionProps {
   clients: Client[]
   loading: boolean
   canDelete: boolean
+  canEdit?: boolean
+  initialClientId?: string
+  openOfficerForm?: boolean
+  onOfficerFormOpened?: () => void
   userId?: string
   onRefetch: () => void
   pageError?: string
@@ -25,6 +29,10 @@ export function ComplianceOfficersSection({
   clients,
   loading,
   canDelete,
+  canEdit = true,
+  initialClientId,
+  openOfficerForm,
+  onOfficerFormOpened,
   userId,
   onRefetch,
   pageError,
@@ -36,6 +44,14 @@ export function ComplianceOfficersSection({
   const [editTarget, setEditTarget] = useState<ClientComplianceOfficer | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ClientComplianceOfficer | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (openOfficerForm) {
+      setEditTarget(null)
+      setFormOpen(true)
+      onOfficerFormOpened?.()
+    }
+  }, [openOfficerForm, onOfficerFormOpened])
 
   const filtered = useMemo(() => {
     return officers.filter((o) => {
@@ -64,9 +80,11 @@ export function ComplianceOfficersSection({
             {filtered.length} registro(s) · {activeCount} vigente(s) · Art. 52 LFPIORPI por cliente
           </p>
         </div>
-        <Button onClick={() => { setEditTarget(null); setFormOpen(true) }}>
-          <Plus size={14} /> Nuevo oficial
-        </Button>
+        {canEdit && (
+          <Button onClick={() => { setEditTarget(null); setFormOpen(true) }}>
+            <Plus size={14} /> Nuevo oficial
+          </Button>
+        )}
       </div>
 
       {pageError && <p className="form-error compliance-banner">{pageError}</p>}
@@ -160,6 +178,7 @@ export function ComplianceOfficersSection({
         open={formOpen}
         officer={editTarget}
         clients={clients}
+        initialClientId={initialClientId}
         onClose={() => { setFormOpen(false); setEditTarget(null) }}
         onSaved={onRefetch}
         userId={userId}

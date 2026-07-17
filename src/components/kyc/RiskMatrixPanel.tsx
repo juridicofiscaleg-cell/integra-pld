@@ -5,6 +5,7 @@ import { Select } from '../ui/Select'
 import { Badge } from '../ui/Badge'
 import { saveClientRiskMatrix } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { canWrite } from '../../lib/permissions'
 import type { Client } from '../../lib/types'
 import { RISK_LABELS } from '../../lib/types'
 import {
@@ -21,7 +22,8 @@ interface RiskMatrixPanelProps {
 }
 
 export function RiskMatrixPanel({ client, onUpdated }: RiskMatrixPanelProps) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const canEdit = canWrite(profile?.role)
   const stored = (client.risk_matrix ?? {}) as unknown as RiskMatrixFactors
   const [factors, setFactors] = useState<RiskMatrixFactors>(
     Object.keys(stored).length ? stored : defaultRiskMatrix(client.client_type, client.vulnerable_activity ?? false),
@@ -76,6 +78,7 @@ export function RiskMatrixPanel({ client, onUpdated }: RiskMatrixPanelProps) {
               label=""
               value={String(factors[key] ?? 1)}
               onChange={(e) => setFactor(key, Number(e.target.value))}
+              disabled={!canEdit}
             >
               <option value="1">1 — Bajo</option>
               <option value="2">2 — Medio</option>
@@ -89,14 +92,19 @@ export function RiskMatrixPanel({ client, onUpdated }: RiskMatrixPanelProps) {
         label="Notas de evaluación"
         value={factors.notes ?? ''}
         onChange={(e) => setFactors((f) => ({ ...f, notes: e.target.value }))}
+        disabled={!canEdit}
       />
 
       {error && <p className="form-error">{error}</p>}
       {saved && <p className="form-success">Matriz guardada — riesgo {RISK_LABELS[level]}</p>}
 
-      <Button type="button" disabled={saving} onClick={handleSave}>
-        {saving ? 'Guardando...' : 'Guardar matriz de riesgo'}
-      </Button>
+      {canEdit ? (
+        <Button type="button" disabled={saving} onClick={handleSave}>
+          {saving ? 'Guardando...' : 'Guardar matriz de riesgo'}
+        </Button>
+      ) : (
+        <p className="card-desc">Solo abogados y administradores pueden editar la matriz.</p>
+      )}
     </div>
   )
 }

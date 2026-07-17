@@ -3,7 +3,7 @@ import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { Button } from '../ui/Button'
-import { createTrainingSession, updateTrainingSession } from '../../lib/api'
+import { createTrainingSession, updateTrainingSession, uploadTrainingEvidence } from '../../lib/api'
 import type { Client, ClientComplianceOfficer, TrainingModality, TrainingSession } from '../../lib/types'
 import { TRAINING_MODALITY_LABELS } from '../../lib/types'
 
@@ -12,6 +12,7 @@ interface TrainingFormModalProps {
   session?: TrainingSession | null
   clients: Client[]
   officers: ClientComplianceOfficer[]
+  initialClientId?: string
   onClose: () => void
   onSaved: (id?: string) => void
   userId?: string
@@ -31,10 +32,11 @@ const emptyForm = {
   notes: '',
 }
 
-export function TrainingFormModal({ open, session, clients, officers, onClose, onSaved, userId }: TrainingFormModalProps) {
+export function TrainingFormModal({ open, session, clients, officers, initialClientId, onClose, onSaved, userId }: TrainingFormModalProps) {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null)
 
   const clientOfficers = useMemo(
     () => officers.filter((o) => o.client_id === form.client_id),
@@ -57,10 +59,11 @@ export function TrainingFormModal({ open, session, clients, officers, onClose, o
         notes: session.notes ?? '',
       })
     } else {
-      setForm(emptyForm)
+      setForm(initialClientId ? { ...emptyForm, client_id: initialClientId } : emptyForm)
     }
+    setEvidenceFile(null)
     setError('')
-  }, [session, open])
+  }, [session, open, initialClientId])
 
   useEffect(() => {
     if (!form.client_id) return
@@ -93,19 +96,37 @@ export function TrainingFormModal({ open, session, clients, officers, onClose, o
 
     if (session) {
       const updateResult = await updateTrainingSession(session.id, payload)
-      setSaving(false)
       if (updateResult.error) {
+        setSaving(false)
         setError(updateResult.error)
         return
       }
+      if (evidenceFile) {
+        const evResult = await uploadTrainingEvidence(session.id, evidenceFile)
+        if (evResult.error) {
+          setSaving(false)
+          setError(evResult.error)
+          return
+        }
+      }
+      setSaving(false)
       onSaved(session.id)
     } else {
       const createResult = await createTrainingSession(payload, userId)
-      setSaving(false)
       if (createResult.error) {
+        setSaving(false)
         setError(createResult.error)
         return
       }
+      if (createResult.id && evidenceFile) {
+        const evResult = await uploadTrainingEvidence(createResult.id, evidenceFile)
+        if (evResult.error) {
+          setSaving(false)
+          setError(evResult.error)
+          return
+        }
+      }
+      setSaving(false)
       onSaved(createResult.id)
     }
     onClose()
@@ -174,6 +195,18 @@ export function TrainingFormModal({ open, session, clients, officers, onClose, o
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
             placeholder="Señales de alerta, umbrales, procedimiento de avisos..."
           />
+        </div>
+        <div className="form-field">
+          <label htmlFor="evidence">Evidencia (lista de asistencia, fotos, etc.)</label>
+          <input
+            id="evidence"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            onChange={(e) => setEvidenceFile(e.target.files?.[0] ?? null)}
+          />
+          {session?.evidence_path && !evidenceFile && (
+            <p className="card-desc">Ya hay evidencia registrada. Sube un archivo para reemplazarla.</p>
+          )}
         </div>
         {error && <p className="form-error">{error}</p>}
         <div className="modal-actions">

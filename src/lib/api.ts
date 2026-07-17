@@ -221,6 +221,8 @@ export async function createKyc(
     pep: boolean
     sanctions_check: boolean
     beneficial_owner?: string
+    beneficial_owners?: BeneficialOwner[]
+    pep_questionnaire?: PepQuestionnaire
     review_notes?: string
     status?: KycStatus
     expires_at?: string
@@ -248,6 +250,8 @@ export async function createKyc(
       pep: data.pep,
       sanctions_check: data.sanctions_check,
       beneficial_owner: data.beneficial_owner?.trim() || null,
+      beneficial_owners: data.beneficial_owners ?? [],
+      pep_questionnaire: data.pep_questionnaire ?? {},
       review_notes: data.review_notes?.trim() || null,
       expires_at,
       created_by: userId ?? null,
@@ -912,6 +916,17 @@ export async function saveClientRiskMatrix(
 
   if (error) return { error: error.message }
 
+  const { data: approvedKyc } = await supabase
+    .from('kyc_records')
+    .select('id')
+    .eq('client_id', clientId)
+    .eq('status', 'aprobado')
+
+  const newExpiry = defaultKycExpiry(matrix_risk_level)
+  for (const k of approvedKyc ?? []) {
+    await supabase.from('kyc_records').update({ expires_at: newExpiry, updated_at: new Date().toISOString() }).eq('id', k.id)
+  }
+
   await supabase.from('activity_log').insert({
     client_id: clientId,
     user_id: userId ?? null,
@@ -940,18 +955,31 @@ export async function updateKycExtended(
 ): Promise<{ error?: string }> {
   if (!isSupabaseConfigured || !supabase) return { error: 'Supabase no configurado' }
 
-  const risk_score = calcRiskScore(data.checklist)
   const now = new Date().toISOString()
+
+  let checklist = data.checklist
+  let sanctions_check = data.sanctions_check
+  if (data.sanctions_results) {
+    const allClear = Object.values(data.sanctions_results).every((r) => !r.match)
+    checklist = {
+      ...checklist,
+      ofac_verificado: !data.sanctions_results.ofac?.match,
+      sat_69b_verificado: !data.sanctions_results.sat_69b?.match,
+      un_list_verificado: !data.sanctions_results.un?.match,
+      lista_negra_verificada: allClear,
+    }
+    sanctions_check = allClear
+  }
 
   const { error } = await supabase
     .from('kyc_records')
     .update({
-      checklist: data.checklist,
+      checklist,
       status: data.status,
-      risk_score,
-      checklist_completion: risk_score,
+      risk_score: calcRiskScore(checklist),
+      checklist_completion: calcRiskScore(checklist),
       pep: data.pep,
-      sanctions_check: data.sanctions_check,
+      sanctions_check,
       beneficial_owner: data.beneficial_owner?.trim() || null,
       beneficial_owners: data.beneficial_owners ?? [],
       pep_questionnaire: data.pep_questionnaire ?? {},
@@ -1538,14 +1566,48 @@ export async function getComplianceManualUrl(storagePath: string): Promise<strin
   return data?.signedUrl ?? null
 }
 
+export async function deleteUnusualNotice(noticeId: string): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('unusual_notices').delete().eq('id', noticeId)
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function uploadTrainingEvidence(
+  trainingId: string,
+  file: File,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+  const storagePath = `capacitaciones/${trainingId}/${Date.now()}_${safeName}`
+  const { error: upErr } = await supabase.storage.from('cumplimiento').upload(storagePath, file)
+  if (upErr) return { error: upErr.message }
+  const { error } = await supabase
+    .from('training_sessions')
+    .update({ evidence_path: storagePath, updated_at: new Date().toISOString() })
+    .eq('id', trainingId)
+  if (error) return { error: error.message }
+  return {}
+}
+
+export async function getTrainingEvidenceUrl(storagePath: string): Promise<string | null> {
+  if (!supabase) return null
+  const { data } = await supabase.storage.from('cumplimiento').createSignedUrl(storagePath, 3600)
+  return data?.signedUrl ?? null
+}
+
 export async function exportClientBundle(clientId: string): Promise<{ error?: string }> {
   if (!supabase) return { error: 'Supabase no configurado' }
-  const [client, kyc, docs, ops, notices] = await Promise.all([
+  const [client, kyc, docs, ops, notices, officers, manuals, trainings, expedientes] = await Promise.all([
     supabase.from('clients').select('*').eq('id', clientId).single(),
     supabase.from('kyc_records').select('*').eq('client_id', clientId),
     supabase.from('documents').select('*').eq('client_id', clientId),
     supabase.from('pld_operations').select('*').eq('client_id', clientId),
     supabase.from('unusual_notices').select('*').eq('client_id', clientId),
+    supabase.from('client_compliance_officers').select('*').eq('client_id', clientId),
+    supabase.from('compliance_manuals').select('*').eq('client_id', clientId),
+    supabase.from('training_sessions').select('*').eq('client_id', clientId),
+    supabase.from('expedientes').select('*').eq('client_id', clientId),
   ])
   const bundle = {
     exported_at: new Date().toISOString(),
@@ -1554,6 +1616,10 @@ export async function exportClientBundle(clientId: string): Promise<{ error?: st
     documents: docs.data,
     operations: ops.data,
     notices: notices.data,
+    compliance_officers: officers.data,
+    compliance_manuals: manuals.data,
+    training_sessions: trainings.data,
+    expedientes: expedientes.data,
   }
   const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)

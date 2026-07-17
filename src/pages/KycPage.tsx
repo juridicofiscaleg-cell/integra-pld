@@ -30,6 +30,7 @@ function checklistProgress(checklist: KycChecklist): number {
 export function KycPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const highlightId = searchParams.get('kyc')
+  const openEdit = searchParams.get('edit') === '1'
   const highlightRef = useRef<HTMLDivElement>(null)
   const { user, profile } = useAuth()
   const { records, loading, refetch } = useKycRecords()
@@ -60,16 +61,18 @@ export function KycPage() {
     if (!highlightId || loading) return
     const target = records.find((k) => k.id === highlightId)
     if (!target) return
+    if (openEdit) setEditing(target)
     highlightRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     const timer = window.setTimeout(() => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev)
         next.delete('kyc')
+        next.delete('edit')
         return next
       }, { replace: true })
-    }, 4000)
+    }, openEdit ? 0 : 4000)
     return () => window.clearTimeout(timer)
-  }, [highlightId, loading, records, setSearchParams])
+  }, [highlightId, openEdit, loading, records, setSearchParams])
 
   return (
     <div className="page">

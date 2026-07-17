@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { BookOpen, Download, GraduationCap, Plus, Shield } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -18,9 +18,14 @@ import {
 import { exportTrainingsCsv } from '../lib/export'
 import type { TrainingSession } from '../lib/types'
 import { formatDate } from '../lib/utils'
+import { canDelete as roleCanDelete, canWrite } from '../lib/permissions'
 import { parseParticipants } from '../lib/certificate-template'
 
 export function CompliancePage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlClient = searchParams.get('cliente') ?? ''
+  const urlAction = searchParams.get('accion') ?? ''
+  const urlTraining = searchParams.get('capacitacion') ?? ''
   const { user, profile } = useAuth()
   const { clients } = useClients()
   const { manuals, loading: manualsLoading, error: manualsError, refetch: refetchManuals } = useComplianceManuals()
@@ -33,12 +38,45 @@ export function CompliancePage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editSession, setEditSession] = useState<TrainingSession | null>(null)
   const [detailSession, setDetailSession] = useState<TrainingSession | null>(null)
+  const [prefillClientId, setPrefillClientId] = useState('')
+  const [openOfficerForm, setOpenOfficerForm] = useState(false)
+  const [openManualForm, setOpenManualForm] = useState(false)
 
-  const canDelete = profile?.role !== 'asistente'
+  const canDelete = roleCanDelete(profile?.role)
+  const canEdit = canWrite(profile?.role)
   const currentYear = new Date().getFullYear()
   const sessionsThisYear = sessions.filter((s) => s.session_date.startsWith(String(currentYear)))
   const activeOfficers = officers.filter((o) => o.is_active)
   const activeManuals = manuals.filter((m) => m.is_active)
+
+  useEffect(() => {
+    if (urlTraining && sessions.length) {
+      const t = sessions.find((s) => s.id === urlTraining)
+      if (t) setDetailSession(t)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('capacitacion')
+        return next
+      }, { replace: true })
+    }
+  }, [urlTraining, sessions, setSearchParams])
+
+  useEffect(() => {
+    if (!urlClient) return
+    setPrefillClientId(urlClient)
+    if (urlAction === 'capacitacion') {
+      setEditSession(null)
+      setFormOpen(true)
+    }
+    if (urlAction === 'oficial') setOpenOfficerForm(true)
+    if (urlAction === 'manual') setOpenManualForm(true)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('cliente')
+      next.delete('accion')
+      return next
+    }, { replace: true })
+  }, [urlClient, urlAction, setSearchParams])
 
   useEffect(() => {
     const err = officersError || manualsError
@@ -116,6 +154,10 @@ export function CompliancePage() {
         clients={clients}
         loading={officersLoading}
         canDelete={canDelete}
+        canEdit={canEdit}
+        initialClientId={prefillClientId}
+        openOfficerForm={openOfficerForm}
+        onOfficerFormOpened={() => setOpenOfficerForm(false)}
         userId={user?.id}
         onRefetch={refetchOfficers}
         pageError={officersError && !migrationBanner ? officersError : undefined}
@@ -126,6 +168,10 @@ export function CompliancePage() {
         clients={clients}
         loading={manualsLoading}
         canDelete={canDelete}
+        canEdit={canEdit}
+        initialClientId={prefillClientId}
+        openUploadForm={openManualForm}
+        onUploadFormOpened={() => setOpenManualForm(false)}
         userId={user?.id}
         onRefetch={refetchManuals}
         pageError={manualsError && !migrationBanner ? manualsError : undefined}
@@ -141,9 +187,11 @@ export function CompliancePage() {
             <Button variant="secondary" onClick={() => exportTrainingsCsv(sessions, clients)} disabled={sessions.length === 0}>
               <Download size={14} /> Export CSV
             </Button>
-            <Button onClick={() => { setEditSession(null); setFormOpen(true) }}>
-              <Plus size={14} /> Nueva capacitación
-            </Button>
+            {canEdit && (
+              <Button onClick={() => { setEditSession(null); setFormOpen(true) }}>
+                <Plus size={14} /> Nueva capacitación
+              </Button>
+            )}
           </div>
         </div>
 
@@ -230,7 +278,8 @@ export function CompliancePage() {
         session={editSession}
         clients={clients}
         officers={officers}
-        onClose={() => { setFormOpen(false); setEditSession(null) }}
+        initialClientId={prefillClientId}
+        onClose={() => { setFormOpen(false); setEditSession(null); setPrefillClientId('') }}
         onSaved={handleSaved}
         userId={user?.id}
       />

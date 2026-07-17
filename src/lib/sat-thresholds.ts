@@ -18,11 +18,42 @@ export const SAT_THRESHOLDS: ActivityThreshold[] = [
   { activity: 'Otra actividad vulnerable', relevantAmount: 1_500_000, unusualAmount: 600_000, notice24hAmount: 3_000_000, description: 'Umbral genérico conservador' },
 ]
 
-export function getThresholdForActivity(industry?: string): ActivityThreshold {
-  if (!industry) return SAT_THRESHOLDS[SAT_THRESHOLDS.length - 1]
+const ACTIVITY_CODE_HINTS: Record<string, string> = {
+  '522110': 'Préstamos',
+  '522112': 'Préstamos',
+  '531': 'Bienes raíces',
+  '5311': 'Bienes raíces',
+  '5312': 'Bienes raíces',
+  '5313': 'Bienes raíces',
+  '5411': 'Servicios profesionales',
+  '541110': 'Servicios profesionales',
+  '541199': 'Servicios profesionales',
+  '523': 'Inversiones',
+  '5239': 'Inversiones',
+  '441': 'Vehículos',
+  '4411': 'Vehículos',
+  '4412': 'Vehículos',
+  '339910': 'Metales y joyas',
+  '561622': 'Blindaje',
+}
+
+function resolveIndustry(industry?: string, activityCode?: string): string | undefined {
+  if (activityCode) {
+    const code = activityCode.trim()
+    const direct = ACTIVITY_CODE_HINTS[code]
+    if (direct) return direct
+    const prefix = Object.entries(ACTIVITY_CODE_HINTS).find(([k]) => code.startsWith(k))
+    if (prefix) return prefix[1]
+  }
+  return industry
+}
+
+export function getThresholdForActivity(industry?: string, activityCode?: string): ActivityThreshold {
+  const resolved = resolveIndustry(industry, activityCode)
+  if (!resolved) return SAT_THRESHOLDS[SAT_THRESHOLDS.length - 1]
   const match = SAT_THRESHOLDS.find((t) =>
-    industry.toLowerCase().includes(t.activity.toLowerCase().slice(0, 8)) ||
-    t.activity.toLowerCase().includes(industry.toLowerCase().slice(0, 6)),
+    resolved.toLowerCase().includes(t.activity.toLowerCase().slice(0, 8)) ||
+    t.activity.toLowerCase().includes(resolved.toLowerCase().slice(0, 6)),
   )
   return match ?? SAT_THRESHOLDS[SAT_THRESHOLDS.length - 1]
 }
@@ -30,9 +61,10 @@ export function getThresholdForActivity(industry?: string): ActivityThreshold {
 export function classifyOperation(
   amount: number | undefined,
   industry?: string,
+  activityCode?: string,
 ): { noticeType: 'relevante' | 'inusual' | '24h' | null; label: string } {
   if (!amount || amount <= 0) return { noticeType: null, label: 'Sin monto — evaluar manualmente' }
-  const t = getThresholdForActivity(industry)
+  const t = getThresholdForActivity(industry, activityCode)
   if (amount >= t.notice24hAmount) return { noticeType: '24h', label: `Supera umbral 24h ($${t.notice24hAmount.toLocaleString('es-MX')} MXN)` }
   if (amount >= t.relevantAmount) return { noticeType: 'relevante', label: `Operación relevante (≥ $${t.relevantAmount.toLocaleString('es-MX')})` }
   if (amount >= t.unusualAmount) return { noticeType: 'inusual', label: `Posible inusual (≥ $${t.unusualAmount.toLocaleString('es-MX')})` }

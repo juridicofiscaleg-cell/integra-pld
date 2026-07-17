@@ -30,7 +30,7 @@ export function ClientOperationsPanel({ clientId, operations, notices, onRefresh
     <div className="client-ops-panel">
       <div className="client-ops-header">
         <strong>Operaciones PLD ({clientOps.length})</strong>
-        <Link to="/operaciones"><Button variant="secondary"><Plus size={14} /> Registrar</Button></Link>
+        <Link to={`/operaciones?cliente=${clientId}`}><Button variant="secondary"><Plus size={14} /> Registrar</Button></Link>
       </div>
       {clientOps.length === 0 ? (
         <p className="empty-state">Sin operaciones</p>

@@ -29,6 +29,7 @@ export function exportClientsCsv(
     industry?: string
     vulnerable_activity?: boolean
     risk_level: string
+    matrix_risk_level?: string
     nationality?: string
     created_at: string
   }>,
@@ -45,7 +46,7 @@ export function exportClientsCsv(
       c.phone ?? '',
       c.industry ?? '',
       c.vulnerable_activity ? 'Sí' : 'No',
-      c.risk_level,
+      c.matrix_risk_level ?? c.risk_level,
       c.nationality ?? '',
       c.created_at.slice(0, 10),
     ]),
@@ -152,6 +153,23 @@ export function exportOperationsCsv(
   )
 }
 
+export function filterByDateRange<T>(
+  items: T[],
+  dateField: keyof T,
+  from?: string,
+  to?: string,
+): T[] {
+  if (!from && !to) return items
+  return items.filter((item) => {
+    const raw = item[dateField]
+    if (typeof raw !== 'string') return true
+    const d = raw.slice(0, 10)
+    if (from && d < from) return false
+    if (to && d > to) return false
+    return true
+  })
+}
+
 export function exportNoticesCsv(
   notices: Array<{
     detected_at: string
@@ -174,6 +192,54 @@ export function exportNoticesCsv(
       n.title,
       n.amount?.toString() ?? '',
       n.submitted_at ?? '',
+    ]),
+  )
+}
+
+export function exportOfficersCsv(
+  officers: Array<{
+    name: string
+    email?: string
+    rfc?: string
+    appointed_at?: string
+    is_active: boolean
+    clients?: { name: string }
+  }>,
+) {
+  downloadCsv(
+    `integra-pld-oficiales-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Cliente', 'Oficial', 'Email', 'RFC', 'Designación', 'Vigente'],
+    officers.map((o) => [
+      o.clients?.name ?? '',
+      o.name,
+      o.email ?? '',
+      o.rfc ?? '',
+      o.appointed_at?.slice(0, 10) ?? '',
+      o.is_active ? 'Sí' : 'No',
+    ]),
+  )
+}
+
+export function exportManualsCsv(
+  manuals: Array<{
+    title: string
+    version: string
+    effective_date: string
+    is_active: boolean
+    file_name?: string
+    clients?: { name: string }
+  }>,
+) {
+  downloadCsv(
+    `integra-pld-manuales-${new Date().toISOString().slice(0, 10)}.csv`,
+    ['Cliente', 'Título', 'Versión', 'Vigente desde', 'Archivo', 'Activo'],
+    manuals.map((m) => [
+      m.clients?.name ?? '',
+      m.title,
+      m.version,
+      m.effective_date,
+      m.file_name ?? '',
+      m.is_active ? 'Sí' : 'No',
     ]),
   )
 }

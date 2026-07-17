@@ -5,7 +5,9 @@ import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
 import { createKyc } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
-import type { Client, Expediente, KycChecklist } from '../../lib/types'
+import { BeneficialOwnersEditor } from './BeneficialOwnersEditor'
+import { PepQuestionnairePanel } from './PepQuestionnairePanel'
+import type { BeneficialOwner, Client, Expediente, KycChecklist, PepQuestionnaire } from '../../lib/types'
 import { KYC_CHECKLIST_ITEMS } from '../../lib/types'
 
 interface NewKycModalProps {
@@ -27,6 +29,8 @@ export function NewKycModal({ open, onClose, clients, expedientes, onCreated }: 
   const [pep, setPep] = useState(false)
   const [sanctionsCheck, setSanctionsCheck] = useState(false)
   const [beneficialOwner, setBeneficialOwner] = useState('')
+  const [beneficialOwners, setBeneficialOwners] = useState<BeneficialOwner[]>([])
+  const [pepQuestionnaire, setPepQuestionnaire] = useState<PepQuestionnaire>({ is_pep: false })
   const [reviewNotes, setReviewNotes] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -40,6 +44,8 @@ export function NewKycModal({ open, onClose, clients, expedientes, onCreated }: 
     setPep(false)
     setSanctionsCheck(false)
     setBeneficialOwner('')
+    setBeneficialOwners([])
+    setPepQuestionnaire({ is_pep: false })
     setReviewNotes('')
     setError('')
   }
@@ -63,14 +69,17 @@ export function NewKycModal({ open, onClose, clients, expedientes, onCreated }: 
     setSubmitting(true)
     setError('')
 
+    const pepFinal = pepQuestionnaire.is_pep || pep
     const result = await createKyc(
       {
         client_id: clientId,
         expediente_id: expedienteId || undefined,
         checklist,
-        pep,
+        pep: pepFinal,
         sanctions_check: sanctionsCheck,
         beneficial_owner: beneficialOwner,
+        beneficial_owners: beneficialOwners,
+        pep_questionnaire: pepQuestionnaire,
         review_notes: reviewNotes,
         status: 'en_revision',
       },
@@ -135,7 +144,10 @@ export function NewKycModal({ open, onClose, clients, expedientes, onCreated }: 
             </label>
           </div>
 
-          <Input label="Beneficiario controlador" value={beneficialOwner} onChange={(e) => setBeneficialOwner(e.target.value)} />
+          <PepQuestionnairePanel value={pepQuestionnaire} onChange={setPepQuestionnaire} />
+          <BeneficialOwnersEditor owners={beneficialOwners} onChange={setBeneficialOwners} />
+
+          <Input label="Beneficiario controlador (texto)" value={beneficialOwner} onChange={(e) => setBeneficialOwner(e.target.value)} />
           <Input label="Notas de revisión" value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />
 
           {error && <p className="form-error">{error}</p>}

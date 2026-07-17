@@ -11,6 +11,7 @@ interface OfficerFormModalProps {
   open: boolean
   officer?: ClientComplianceOfficer | null
   clients: Client[]
+  initialClientId?: string
   onClose: () => void
   onSaved: () => void
   userId?: string
@@ -28,7 +29,7 @@ const empty = {
   notes: '',
 }
 
-export function OfficerFormModal({ open, officer, clients, onClose, onSaved, userId }: OfficerFormModalProps) {
+export function OfficerFormModal({ open, officer, clients, initialClientId, onClose, onSaved, userId }: OfficerFormModalProps) {
   const [form, setForm] = useState(empty)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -51,6 +52,12 @@ export function OfficerFormModal({ open, officer, clients, onClose, onSaved, use
     }
     setError('')
   }, [officer, open])
+
+  useEffect(() => {
+    if (open && initialClientId && !officer) {
+      setForm((f) => ({ ...f, client_id: initialClientId }))
+    }
+  }, [open, initialClientId, officer])
 
   const vulnerableClients = useMemo(
     () => [...clients].sort((a, b) => a.name.localeCompare(b.name)),

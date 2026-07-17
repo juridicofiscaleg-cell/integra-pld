@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Download, Plus, Trash2, Upload } from 'lucide-react'
 import { Badge } from '../ui/Badge'
@@ -17,6 +17,10 @@ interface ClientManualsSectionProps {
   clients: Client[]
   loading: boolean
   canDelete: boolean
+  canEdit?: boolean
+  initialClientId?: string
+  openUploadForm?: boolean
+  onUploadFormOpened?: () => void
   userId?: string
   onRefetch: () => void
   pageError?: string
@@ -27,6 +31,10 @@ export function ClientManualsSection({
   clients,
   loading,
   canDelete,
+  canEdit = true,
+  initialClientId,
+  openUploadForm,
+  onUploadFormOpened,
   userId,
   onRefetch,
   pageError,
@@ -43,6 +51,14 @@ export function ClientManualsSection({
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
   const [uploadError, setUploadError] = useState('')
   const [uploading, setUploading] = useState(false)
+
+  useEffect(() => {
+    if (openUploadForm) {
+      setUploadOpen(true)
+      if (initialClientId) setClientId(initialClientId)
+      onUploadFormOpened?.()
+    }
+  }, [openUploadForm, initialClientId, onUploadFormOpened])
 
   const filtered = useMemo(() => {
     return manuals.filter((m) => {
@@ -98,9 +114,11 @@ export function ClientManualsSection({
           <h2>Manuales PLD por cliente</h2>
           <p className="card-desc">{filtered.length} registro(s) · Art. 53 LFPIORPI · historial de versiones</p>
         </div>
-        <Button onClick={() => { setUploadError(''); setUploadOpen(true) }}>
-          <Plus size={14} /> Subir manual
-        </Button>
+        {canEdit && (
+          <Button onClick={() => { setUploadError(''); setUploadOpen(true) }}>
+            <Plus size={14} /> Subir manual
+          </Button>
+        )}
       </div>
 
       {pageError && <p className="form-error compliance-banner">{pageError}</p>}

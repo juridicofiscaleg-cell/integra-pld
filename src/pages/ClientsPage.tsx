@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button'
 import { FilterBar } from '../components/ui/FilterBar'
 import { ComplianceDot } from '../components/clients/ComplianceDot'
 import { NewClientModal } from '../components/clients/NewClientModal'
-import { useAlerts, useClients, useExpedientes, useKycRecords, usePldOperations, useUnusualNotices } from '../hooks/useData'
+import { useAlerts, useClients, useComplianceManuals, useComplianceOfficers, useExpedientes, useKycRecords, usePldOperations, useTrainingSessions, useUnusualNotices } from '../hooks/useData'
 import { getClientCompliance } from '../lib/compliance'
 import { RISK_LABELS } from '../lib/types'
 import { formatDate } from '../lib/utils'
@@ -25,6 +25,9 @@ export function ClientsPage() {
   const { alerts } = useAlerts()
   const { operations } = usePldOperations()
   const { notices } = useUnusualNotices()
+  const { officers } = useComplianceOfficers()
+  const { manuals } = useComplianceManuals()
+  const { sessions: trainings } = useTrainingSessions()
   const [modalOpen, setModalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [riskFilter, setRiskFilter] = useState('')
@@ -118,7 +121,7 @@ export function ClientsPage() {
             <tbody>
               {filtered.map((client) => {
                 const risk = client.matrix_risk_level ?? client.risk_level
-                const compliance = getClientCompliance(client, kycRecords, expedientes, alerts, operations, notices)
+                const compliance = getClientCompliance(client, kycRecords, expedientes, alerts, operations, notices, officers, manuals, trainings)
                 return (
                   <tr key={client.id}>
                     <td>

@@ -8,8 +8,8 @@ import { EditClientModal } from '../components/clients/EditClientModal'
 import { ClientEmailTemplatesModal } from '../components/clients/ClientEmailTemplatesModal'
 import { ComplianceBadge } from '../components/clients/ComplianceBadge'
 import { ClientTimeline } from '../components/clients/ClientTimeline'
+import { ClientCompliancePanel } from '../components/clients/ClientCompliancePanel'
 import { ClientOperationsPanel } from '../components/operations/ClientOperationsPanel'
-import { DocumentsPanel } from '../components/documents/DocumentsPanel'
 import { RiskMatrixPanel } from '../components/kyc/RiskMatrixPanel'
 import { SanctionsPanel } from '../components/kyc/SanctionsPanel'
 import { deleteClient, exportClientBundle } from '../lib/api'
@@ -19,12 +19,17 @@ import {
   useAlerts,
   useClientActivity,
   useClients,
+  useComplianceManuals,
+  useComplianceOfficers,
   useExpedientes,
   useKycRecords,
   usePldOperations,
+  useTrainingSessions,
   useUnusualNotices,
 } from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
+import { DocumentsPanel } from '../components/documents/DocumentsPanel'
+import { canDelete as roleCanDelete } from '../lib/permissions'
 import { formatDate } from '../lib/utils'
 
 export function ClientDetailPage() {
@@ -37,6 +42,9 @@ export function ClientDetailPage() {
   const { alerts } = useAlerts()
   const { operations, refetch: refetchOps } = usePldOperations()
   const { notices, refetch: refetchNotices } = useUnusualNotices()
+  const { officers } = useComplianceOfficers()
+  const { manuals } = useComplianceManuals()
+  const { sessions: trainings } = useTrainingSessions()
   const { activity } = useClientActivity(id ?? '')
   const [editing, setEditing] = useState(false)
   const [emailOpen, setEmailOpen] = useState(false)
@@ -44,7 +52,7 @@ export function ClientDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
 
-  const canDelete = profile?.role !== 'asistente'
+  const canDelete = roleCanDelete(profile?.role)
   const client = clients.find((c) => c.id === id)
   const clientExpedientes = expedientes.filter((e) => e.client_id === id)
   const clientKyc = kycRecords.filter((k) => k.client_id === id)
@@ -60,7 +68,7 @@ export function ClientDetailPage() {
   }
 
   const risk = client.matrix_risk_level ?? client.risk_level
-  const compliance = getClientCompliance(client, clientKyc, expedientes, alerts, operations, notices)
+  const compliance = getClientCompliance(client, clientKyc, expedientes, alerts, operations, notices, officers, manuals, trainings)
 
   function refreshOps() {
     refetchOps()
@@ -127,8 +135,16 @@ export function ClientDetailPage() {
 
         <section className="card card-wide">
           <h2>Matriz de riesgo</h2>
-          <RiskMatrixPanel client={client} onUpdated={refetch} />
+          <RiskMatrixPanel client={client} onUpdated={() => { refetch(); refetchKyc() }} />
         </section>
+
+        <ClientCompliancePanel
+          clientId={client.id}
+          officers={officers}
+          manuals={manuals}
+          trainings={trainings}
+          role={profile?.role}
+        />
 
         <section className="card">
           <h2>Operaciones y avisos PLD</h2>
