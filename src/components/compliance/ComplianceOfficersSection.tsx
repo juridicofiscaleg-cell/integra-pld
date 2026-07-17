@@ -6,6 +6,7 @@ import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { FilterBar } from '../ui/FilterBar'
 import { deleteComplianceOfficer } from '../../lib/api'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { Client, ClientComplianceOfficer } from '../../lib/types'
 import { formatDate } from '../../lib/utils'
 import { OfficerFormModal } from './OfficerFormModal'
@@ -44,6 +45,7 @@ export function ComplianceOfficersSection({
   const [editTarget, setEditTarget] = useState<ClientComplianceOfficer | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ClientComplianceOfficer | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const { runSensitiveAction } = useProtectedAction()
 
   useEffect(() => {
     if (openOfficerForm) {
@@ -194,7 +196,13 @@ export function ComplianceOfficersSection({
         onConfirm={async () => {
           if (!deleteTarget) return
           setDeleting(true)
-          await deleteComplianceOfficer(deleteTarget.id)
+          await runSensitiveAction({
+            actionType: 'delete_compliance_officer',
+            title: `Eliminar oficial: ${deleteTarget.name}`,
+            clientId: deleteTarget.client_id,
+            payload: { officerId: deleteTarget.id },
+            direct: () => deleteComplianceOfficer(deleteTarget.id),
+          })
           setDeleting(false)
           setDeleteTarget(null)
           onRefetch()

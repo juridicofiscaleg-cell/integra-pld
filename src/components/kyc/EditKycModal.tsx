@@ -8,6 +8,8 @@ import { BeneficialOwnersEditor } from './BeneficialOwnersEditor'
 import { PepQuestionnairePanel } from './PepQuestionnairePanel'
 import { renewKyc, updateKycExtended } from '../../lib/api'
 import { useAuth } from '../../context/AuthContext'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
+import { canApproveKyc } from '../../lib/permissions'
 import type { BeneficialOwner, KycRecord, KycStatus, PepQuestionnaire } from '../../lib/types'
 import { KYC_CHECKLIST_ITEMS, KYC_STATUS_LABELS } from '../../lib/types'
 
@@ -18,7 +20,8 @@ interface EditKycModalProps {
 }
 
 export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const { runSensitiveAction } = useProtectedAction()
   const [checklist, setChecklist] = useState(kyc?.checklist ?? {})
   const [status, setStatus] = useState<KycStatus>(kyc?.status ?? 'pendiente')
   const [pep, setPep] = useState(kyc?.pep ?? false)
@@ -31,6 +34,7 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [renewing, setRenewing] = useState(false)
+  const [pendingMsg, setPendingMsg] = useState('')
 
   useEffect(() => {
     if (kyc) {
@@ -60,22 +64,42 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
     setError('')
 
     const pepFinal = pepQuestionnaire.is_pep || pep
-    const result = await updateKycExtended(
-      kyc.id,
-      {
-        checklist,
-        status,
-        pep: pepFinal,
-        sanctions_check: sanctionsCheck,
-        beneficial_owner: beneficialOwner,
-        beneficial_owners: beneficialOwners,
-        pep_questionnaire: pepQuestionnaire,
-        review_notes: reviewNotes,
-        expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
-        sanctions_results: kyc.sanctions_results,
-      },
-      user?.id,
-    )
+    const kycData = {
+      checklist,
+      status,
+      pep: pepFinal,
+      sanctions_check: sanctionsCheck,
+      beneficial_owner: beneficialOwner,
+      beneficial_owners: beneficialOwners,
+      pep_questionnaire: pepQuestionnaire,
+      review_notes: reviewNotes,
+      expires_at: expiresAt ? new Date(expiresAt).toISOString() : undefined,
+      sanctions_results: kyc.sanctions_results,
+    }
+
+    const needsApproval = status === 'aprobado' && kyc.status !== 'aprobado' && !canApproveKyc(profile?.role)
+
+    if (needsApproval) {
+      const result = await runSensitiveAction({
+        actionType: 'approve_kyc',
+        title: `Aprobar KYC: ${kyc.clients?.name ?? 'Cliente'}`,
+        clientId: kyc.client_id,
+        description: 'Solicitud de aprobación de debida diligencia',
+        payload: { kycId: kyc.id, kycData },
+        direct: async () => updateKycExtended(kyc.id, kycData, user?.id),
+      })
+      setSubmitting(false)
+      if (result.error) setError(result.error)
+      else if (result.pending) {
+        setPendingMsg('Aprobación solicitada al abogado. Mientras tanto el KYC sigue en revisión.')
+      } else {
+        onUpdated()
+        onClose()
+      }
+      return
+    }
+
+    const result = await updateKycExtended(kyc.id, kycData, user?.id)
 
     setSubmitting(false)
     if (result.error) setError(result.error)
@@ -130,6 +154,7 @@ export function EditKycModal({ kyc, onClose, onUpdated }: EditKycModalProps) {
         </label>
 
         {error && <p className="form-error">{error}</p>}
+        {pendingMsg && <p className="form-success">{pendingMsg}</p>}
         <div className="modal-actions">
           <Button type="button" variant="secondary" onClick={handleRenew} disabled={renewing}>
             {renewing ? 'Renovando...' : 'Renovar KYC'}

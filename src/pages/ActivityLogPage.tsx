@@ -1,13 +1,16 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { Download } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { FilterBar } from '../components/ui/FilterBar'
 import { useActivityLog, useClients } from '../hooks/useData'
 import { exportActivityCsv } from '../lib/export'
+import { canViewAuditLog } from '../lib/permissions'
+import { useAuth } from '../context/AuthContext'
 import { formatDateTime, formatRelative } from '../lib/utils'
 
 export function ActivityLogPage() {
+  const { profile } = useAuth()
   const { activity, loading } = useActivityLog()
   const { clients } = useClients()
   const [search, setSearch] = useState('')
@@ -22,6 +25,8 @@ export function ActivityLogPage() {
     if (actionFilter && a.action !== actionFilter) return false
     return true
   })
+
+  if (!canViewAuditLog(profile?.role)) return <Navigate to="/" replace />
 
   return (
     <div className="page">

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { Download, FileSpreadsheet, Printer } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
@@ -29,9 +30,12 @@ import {
   useUnusualNotices,
 } from '../hooks/useData'
 import { effectiveRiskLevel } from '../lib/client-risk'
+import { canViewReports } from '../lib/permissions'
+import { useAuth } from '../context/AuthContext'
 import { KYC_STATUS_LABELS, RISK_LABELS, STATUS_LABELS } from '../lib/types'
 
 export function ReportsPage() {
+  const { profile } = useAuth()
   const { clients } = useClients()
   const { expedientes } = useExpedientes()
   const { records: kycRecords } = useKycRecords()
@@ -88,6 +92,8 @@ export function ReportsPage() {
     manualsActive: manuals.filter((m) => m.is_active).length,
     trainingsYear: trainings.filter((t) => t.session_date.startsWith(String(new Date().getFullYear()))).length,
   }
+
+  if (!canViewReports(profile?.role)) return <Navigate to="/" replace />
 
   return (
     <div className="page">

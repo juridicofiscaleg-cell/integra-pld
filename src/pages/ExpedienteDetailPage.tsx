@@ -14,6 +14,8 @@ import { EditExpedienteModal } from '../components/expedientes/EditExpedienteMod
 import { useExpediente, useProfiles } from '../hooks/useData'
 import { advanceStage, deleteExpediente, revertStage, updateStageNotes } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import { useProtectedAction } from '../hooks/useProtectedAction'
+import { canDelete as roleCanDelete, needsApprovalForSensitive } from '../lib/permissions'
 import { MATTER_TYPE_LABELS, STATUS_LABELS } from '../lib/types'
 import { getProgressPercent } from '../lib/workflows'
 import { formatDate } from '../lib/utils'
@@ -22,6 +24,7 @@ export function ExpedienteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user, profile } = useAuth()
+  const { runSensitiveAction } = useProtectedAction()
   const { profiles } = useProfiles()
   const { expediente, stages, loading, refetch } = useExpediente(id ?? '')
   const [advancing, setAdvancing] = useState(false)
@@ -32,7 +35,7 @@ export function ExpedienteDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [pendingStage, setPendingStage] = useState<number | null>(null)
 
-  const canDelete = profile?.role !== 'asistente'
+  const mayDelete = roleCanDelete(profile?.role) || needsApprovalForSensitive(profile?.role)
   const assignee = profiles.find((p) => p.id === expediente?.assigned_to)
 
   if (loading) return <div className="page"><p className="loading">Cargando...</p></div>
@@ -70,11 +73,21 @@ export function ExpedienteDetailPage() {
   }
 
   async function handleDelete() {
-    if (!id) return
+    if (!id || !expediente) return
     setDeleting(true)
-    const result = await deleteExpediente(id, user?.id)
+    const exp = expediente
+    const result = await runSensitiveAction({
+      actionType: 'delete_expediente',
+      title: `Eliminar expediente: ${exp.title}`,
+      clientId: exp.client_id,
+      payload: { expedienteId: id },
+      direct: () => deleteExpediente(id, user?.id),
+    })
     setDeleting(false)
-    if (result.error) setError(result.error)
+    if (result.pending) {
+      setDeleteOpen(false)
+      setError('Eliminación solicitada — pendiente de autorización.')
+    } else if (result.error) setError(result.error)
     else navigate('/expedientes')
   }
 
@@ -102,7 +115,7 @@ export function ExpedienteDetailPage() {
           <Button variant="secondary" onClick={() => setEmailOpen(true)}>
             <Mail size={16} /> Avisar cliente
           </Button>
-          {canDelete && (
+          {mayDelete && (
             <Button variant="danger" onClick={() => setDeleteOpen(true)}>
               <Trash2 size={16} /> Eliminar
             </Button>

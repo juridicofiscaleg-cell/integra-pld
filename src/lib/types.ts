@@ -29,6 +29,61 @@ export interface DiagnosisItemRef {
 
 export type NoticeStatus = 'borrador' | 'presentado' | 'archivado'
 
+export type ApprovalStatus = 'pendiente' | 'aprobada' | 'rechazada'
+
+export type ApprovalActionType =
+  | 'delete_client'
+  | 'delete_expediente'
+  | 'delete_kyc'
+  | 'delete_document'
+  | 'delete_operation'
+  | 'delete_notice'
+  | 'delete_compliance_officer'
+  | 'delete_compliance_manual'
+  | 'delete_training'
+  | 'delete_legal_resource'
+  | 'export_client_bundle'
+  | 'approve_kyc'
+
+export interface ApprovalRequest {
+  id: string
+  action_type: ApprovalActionType
+  title: string
+  description?: string
+  payload: Record<string, unknown>
+  client_id?: string
+  status: ApprovalStatus
+  requested_by?: string
+  reviewed_by?: string
+  review_notes?: string
+  created_at: string
+  reviewed_at?: string
+  requester?: Profile
+  reviewer?: Profile
+  clients?: Client
+}
+
+export const APPROVAL_ACTION_LABELS: Record<ApprovalActionType, string> = {
+  delete_client: 'Eliminar cliente',
+  delete_expediente: 'Eliminar expediente',
+  delete_kyc: 'Eliminar KYC',
+  delete_document: 'Eliminar documento',
+  delete_operation: 'Eliminar operación',
+  delete_notice: 'Eliminar aviso',
+  delete_compliance_officer: 'Eliminar oficial',
+  delete_compliance_manual: 'Eliminar manual',
+  delete_training: 'Eliminar capacitación',
+  delete_legal_resource: 'Eliminar recurso',
+  export_client_bundle: 'Exportar expediente PLD',
+  approve_kyc: 'Aprobar KYC',
+}
+
+export const APPROVAL_STATUS_LABELS: Record<ApprovalStatus, string> = {
+  pendiente: 'Pendiente',
+  aprobada: 'Aprobada',
+  rechazada: 'Rechazada',
+}
+
 export interface BeneficialOwner {
   id: string
   name: string

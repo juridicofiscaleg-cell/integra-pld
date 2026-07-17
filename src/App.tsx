@@ -16,6 +16,7 @@ import { LegalLibraryPage } from './pages/LegalLibraryPage'
 import { OperationsPage } from './pages/OperationsPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { CompliancePage } from './pages/CompliancePage'
+import { ApprovalsPage } from './pages/ApprovalsPage'
 import { ActivityLogPage } from './pages/ActivityLogPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ function AppRoutes() {
       <Route path="/calendario" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
       <Route path="/alertas" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
       <Route path="/cumplimiento" element={<ProtectedRoute><CompliancePage /></ProtectedRoute>} />
+      <Route path="/autorizaciones" element={<ProtectedRoute><ApprovalsPage /></ProtectedRoute>} />
       <Route path="/bitacora" element={<ProtectedRoute><ActivityLogPage /></ProtectedRoute>} />
       <Route path="/reportes" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
       <Route path="/biblioteca" element={<ProtectedRoute><LegalLibraryPage /></ProtectedRoute>} />

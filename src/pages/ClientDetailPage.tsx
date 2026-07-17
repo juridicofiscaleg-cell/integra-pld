@@ -15,6 +15,7 @@ import { SanctionsPanel } from '../components/kyc/SanctionsPanel'
 import { deleteClient, exportClientBundle } from '../lib/api'
 import { getClientCompliance } from '../lib/compliance'
 import { useAuth } from '../context/AuthContext'
+import { useProtectedAction } from '../hooks/useProtectedAction'
 import {
   useAlerts,
   useClientActivity,
@@ -29,7 +30,7 @@ import {
 } from '../hooks/useData'
 import { MATTER_TYPE_LABELS, RISK_LABELS } from '../lib/types'
 import { DocumentsPanel } from '../components/documents/DocumentsPanel'
-import { canDelete as roleCanDelete } from '../lib/permissions'
+import { canDelete as roleCanDelete, canExportBundle, needsApprovalForSensitive } from '../lib/permissions'
 import { formatDate } from '../lib/utils'
 
 export function ClientDetailPage() {
@@ -51,8 +52,11 @@ export function ClientDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [actionInfo, setActionInfo] = useState('')
+  const { runSensitiveAction, requiresApproval } = useProtectedAction()
 
-  const canDelete = roleCanDelete(profile?.role)
+  const canDelete = roleCanDelete(profile?.role) || needsApprovalForSensitive(profile?.role)
+  const canExport = canExportBundle(profile?.role) || needsApprovalForSensitive(profile?.role)
   const client = clients.find((c) => c.id === id)
   const clientExpedientes = expedientes.filter((e) => e.client_id === id)
   const clientKyc = kycRecords.filter((k) => k.client_id === id)
@@ -98,13 +102,24 @@ export function ClientDetailPage() {
           <Button variant="secondary" onClick={() => setEmailOpen(true)}>
             <Mail size={16} /> Correo
           </Button>
-          <Button variant="secondary" disabled={exporting} onClick={async () => {
-            setExporting(true)
-            await exportClientBundle(client.id)
-            setExporting(false)
-          }}>
-            <Download size={16} /> Exportar expediente
-          </Button>
+          {canExport && (
+            <Button variant="secondary" disabled={exporting} onClick={async () => {
+              setExporting(true)
+              setActionInfo('')
+              const result = await runSensitiveAction({
+                actionType: 'export_client_bundle',
+                title: `Exportar expediente PLD: ${client.name}`,
+                clientId: client.id,
+                payload: { clientId: client.id },
+                direct: () => exportClientBundle(client.id),
+              })
+              setExporting(false)
+              if (result.pending) setActionInfo('Exportación solicitada — pendiente de autorización.')
+              else if (result.error) setActionInfo(result.error)
+            }}>
+              <Download size={16} /> Exportar expediente
+            </Button>
+          )}
           <Button variant="secondary" onClick={() => setEditing(true)}>
             <Pencil size={16} /> Editar
           </Button>
@@ -117,6 +132,7 @@ export function ClientDetailPage() {
       </header>
 
       <ComplianceBadge summary={compliance} />
+      {actionInfo && <p className="form-success compliance-banner">{actionInfo}</p>}
 
       <div className="detail-grid">
         <section className="card">
@@ -215,15 +231,26 @@ export function ClientDetailPage() {
       <ConfirmDialog
         open={deleteOpen}
         title="Eliminar cliente"
-        message={`¿Eliminar "${client.name}" y todos sus expedientes, KYC y documentos?`}
+        message={requiresApproval('delete_client')
+          ? `¿Solicitar autorización para eliminar "${client.name}" y todos sus expedientes, KYC y documentos?`
+          : `¿Eliminar "${client.name}" y todos sus expedientes, KYC y documentos?`}
         confirmLabel="Eliminar"
         danger
         loading={deleting}
         onConfirm={async () => {
           setDeleting(true)
-          const result = await deleteClient(client.id, user?.id)
+          const result = await runSensitiveAction({
+            actionType: 'delete_client',
+            title: `Eliminar cliente: ${client.name}`,
+            clientId: client.id,
+            payload: { clientId: client.id },
+            direct: () => deleteClient(client.id, user?.id),
+          })
           setDeleting(false)
-          if (!result.error) navigate('/clientes')
+          if (result.pending) {
+            setDeleteOpen(false)
+            setActionInfo('Eliminación solicitada — pendiente de autorización.')
+          } else if (!result.error) navigate('/clientes')
         }}
         onCancel={() => setDeleteOpen(false)}
       />

@@ -9,6 +9,7 @@ import { Modal } from '../ui/Modal'
 import { Input } from '../ui/Input'
 import { Select } from '../ui/Select'
 import { deleteComplianceManual, getComplianceManualUrl, uploadComplianceManual } from '../../lib/api'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import type { Client, ComplianceManual } from '../../lib/types'
 import { formatDate } from '../../lib/utils'
 
@@ -51,6 +52,7 @@ export function ClientManualsSection({
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10))
   const [uploadError, setUploadError] = useState('')
   const [uploading, setUploading] = useState(false)
+  const { runSensitiveAction } = useProtectedAction()
 
   useEffect(() => {
     if (openUploadForm) {
@@ -242,7 +244,13 @@ export function ClientManualsSection({
         onConfirm={async () => {
           if (!deleteTarget) return
           setDeleting(true)
-          await deleteComplianceManual(deleteTarget.id)
+          await runSensitiveAction({
+            actionType: 'delete_compliance_manual',
+            title: `Eliminar manual: ${deleteTarget.title}`,
+            clientId: deleteTarget.client_id,
+            payload: { manualId: deleteTarget.id },
+            direct: () => deleteComplianceManual(deleteTarget.id),
+          })
           setDeleting(false)
           setDeleteTarget(null)
           onRefetch()

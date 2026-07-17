@@ -1,12 +1,32 @@
+import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useProfiles } from '../hooks/useData'
+import { updateProfileRole } from '../lib/api'
 import { isSupabaseConfigured } from '../lib/supabase'
-import { MATTER_TYPE_LABELS, ROLE_LABELS } from '../lib/types'
+import { canManageTeam } from '../lib/permissions'
+import { MATTER_TYPE_LABELS, ROLE_LABELS, type UserRole } from '../lib/types'
 import { DEFAULT_WORKFLOWS } from '../lib/workflows'
+import { Select } from '../components/ui/Select'
 
 export function SettingsPage() {
-  const { profile } = useAuth()
-  const { profiles, loading } = useProfiles()
+  const { profile, user } = useAuth()
+  const { profiles, loading, refetch } = useProfiles()
+  const [teamMessage, setTeamMessage] = useState('')
+  const [savingId, setSavingId] = useState<string | null>(null)
+
+  const canManage = canManageTeam(profile?.role)
+
+  async function handleRoleChange(memberId: string, role: UserRole) {
+    setSavingId(memberId)
+    setTeamMessage('')
+    const result = await updateProfileRole(memberId, role, user?.id)
+    setSavingId(null)
+    if (result.error) setTeamMessage(result.error)
+    else {
+      setTeamMessage('Rol actualizado.')
+      refetch()
+    }
+  }
 
   return (
     <div className="page">
@@ -27,10 +47,10 @@ export function SettingsPage() {
           </dl>
           <p className="card-desc">
             {profile?.role === 'asistente'
-              ? 'Como asistente puedes ver y subir documentos, pero no eliminarlos.'
+              ? 'Como auxiliar puedes registrar y subir información. Eliminar, aprobar KYC y exportar expedientes requieren autorización del abogado.'
               : profile?.role === 'admin'
-                ? 'Como administrador tienes acceso completo al sistema.'
-                : 'Como abogado tienes acceso completo a clientes, expedientes y KYC.'}
+                ? 'Como administrador tienes acceso completo y puedes asignar roles al equipo.'
+                : 'Como abogado tienes acceso completo y puedes autorizar solicitudes de tu auxiliar.'}
           </p>
         </section>
 
@@ -41,31 +61,67 @@ export function SettingsPage() {
           ) : (
             <p className="status-warn">Modo demo activo. Configura .env para datos reales.</p>
           )}
+          {!isSupabaseConfigured && (
+            <p className="card-desc">Las autorizaciones en demo se guardan en este navegador.</p>
+          )}
         </section>
 
-        <section className="card">
-          <h2>Equipo</h2>
+        <section className="card card-wide">
+          <h2>Equipo y roles</h2>
           {loading ? (
             <p className="loading">Cargando equipo...</p>
           ) : profiles.length === 0 ? (
             <p className="card-desc">
               Cada miembro crea su cuenta con el mismo proyecto Supabase.
-              Los roles son: admin, abogado y asistente.
+              Asigna rol <strong>asistente</strong> a tu auxiliar desde aquí (requiere migración de autorizaciones).
             </p>
           ) : (
-            <div className="team-list">
-              {profiles.map((p) => (
-                <div key={p.id} className="team-row">
-                  <div className="user-avatar">{p.full_name.charAt(0)}</div>
-                  <div>
-                    <strong>{p.full_name}</strong>
-                    <span>{p.email}</span>
+            <>
+              {teamMessage && <p className="form-success">{teamMessage}</p>}
+              <div className="team-list">
+                {profiles.map((p) => (
+                  <div key={p.id} className="team-row">
+                    <div className="user-avatar">{p.full_name.charAt(0)}</div>
+                    <div>
+                      <strong>{p.full_name}</strong>
+                      <span>{p.email}</span>
+                    </div>
+                    {canManage && p.id !== profile?.id ? (
+                      <Select
+                        label=""
+                        value={p.role}
+                        disabled={savingId === p.id}
+                        onChange={(e) => handleRoleChange(p.id, e.target.value as UserRole)}
+                      >
+                        {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
+                          <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <span className="team-role">{ROLE_LABELS[p.role]}</span>
+                    )}
                   </div>
-                  <span className="team-role">{ROLE_LABELS[p.role]}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              {canManage && (
+                <p className="card-desc">
+                  Tip: asigna <strong>Asistente</strong> a personal de apoyo; podrá trabajar pero las eliminaciones irán a Autorizaciones.
+                </p>
+              )}
+            </>
           )}
+        </section>
+
+        <section className="card">
+          <h2>Permisos por rol</h2>
+          <dl className="detail-list compact-perms">
+            <dt>Asistente</dt>
+            <dd>Ver, crear, editar, subir docs. Eliminar/aprobar/exportar → solicita autorización.</dd>
+            <dt>Abogado</dt>
+            <dd>Acceso completo + revisar autorizaciones + reportes y bitácora.</dd>
+            <dt>Admin</dt>
+            <dd>Igual que abogado + gestión de roles del equipo.</dd>
+          </dl>
         </section>
 
         <section className="card">

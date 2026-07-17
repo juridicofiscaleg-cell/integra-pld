@@ -4,6 +4,7 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { deleteTrainingSession, getTrainingEvidenceUrl, saveTrainingCertificate } from '../../lib/api'
+import { useProtectedAction } from '../../hooks/useProtectedAction'
 import { generateCertificateText } from '../../lib/certificates'
 import { resolveCertificateContext } from '../../lib/compliance-officers'
 import {
@@ -39,6 +40,7 @@ export function TrainingDetailModal({
   onUpdated,
   onDeleted,
 }: TrainingDetailModalProps) {
+  const { runSensitiveAction } = useProtectedAction()
   const [generating, setGenerating] = useState(false)
   const [certError, setCertError] = useState('')
   const [certInfo, setCertInfo] = useState('')
@@ -116,10 +118,21 @@ export function TrainingDetailModal({
   async function handleDelete() {
     if (!confirm('¿Eliminar esta capacitación del historial?')) return
     setDeleting(true)
-    const result = await deleteTrainingSession(session!.id)
+    const result = await runSensitiveAction({
+      actionType: 'delete_training',
+      title: `Eliminar capacitación: ${session!.title}`,
+      clientId: session!.client_id,
+      payload: { trainingId: session!.id },
+      direct: () => deleteTrainingSession(session!.id),
+    })
     setDeleting(false)
     if (result.error) {
       setCertError(result.error)
+      return
+    }
+    if (result.pending) {
+      setCertError('')
+      setCertInfo('Eliminación solicitada — pendiente de autorización.')
       return
     }
     onDeleted()

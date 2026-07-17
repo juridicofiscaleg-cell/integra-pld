@@ -8,6 +8,8 @@ import { Modal } from '../components/ui/Modal'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { deleteLegalResource, getLegalResourceUrl, uploadLegalResource } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import { useProtectedAction } from '../hooks/useProtectedAction'
+import { canDelete as roleCanDelete, needsApprovalForSensitive } from '../lib/permissions'
 import { useLegalResources } from '../hooks/useData'
 import { LFPIORPI_ARTICLES, LEGAL_CATEGORIES } from '../lib/lfpiorpi'
 import { formatDate } from '../lib/utils'
@@ -28,7 +30,8 @@ export function LegalLibraryPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  const canDelete = profile?.role !== 'asistente'
+  const { runSensitiveAction } = useProtectedAction()
+  const mayDelete = roleCanDelete(profile?.role) || needsApprovalForSensitive(profile?.role)
 
   const filteredArticles = LFPIORPI_ARTICLES.filter(
     (a) =>
@@ -70,7 +73,13 @@ export function LegalLibraryPage() {
   async function handleDelete() {
     if (!deleteId) return
     setSubmitting(true)
-    await deleteLegalResource(deleteId.id, deleteId.path)
+    const resource = resources.find((r) => r.id === deleteId.id)
+    await runSensitiveAction({
+      actionType: 'delete_legal_resource',
+      title: `Eliminar recurso: ${resource?.title ?? deleteId.id}`,
+      payload: { resourceId: deleteId.id, storagePath: deleteId.path },
+      direct: () => deleteLegalResource(deleteId.id, deleteId.path),
+    })
     setSubmitting(false)
     setDeleteId(null)
     refetch()
@@ -83,7 +92,7 @@ export function LegalLibraryPage() {
           <h1>Biblioteca legal</h1>
           <p>LFPIORPI, formatos y plantillas del despacho</p>
         </div>
-        {canDelete && (
+        {mayDelete && (
           <Button onClick={() => setUploadOpen(true)}>
             <Plus size={16} /> Subir formato
           </Button>
@@ -155,7 +164,7 @@ export function LegalLibraryPage() {
                   <Download size={16} />
                 </button>
               )}
-              {canDelete && (
+              {mayDelete && (
                 <button
                   type="button"
                   className="icon-btn danger"

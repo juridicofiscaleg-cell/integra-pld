@@ -138,6 +138,14 @@ a:hover { text-decoration: underline; }
   padding: 2rem;
   overflow-y: auto;
   max-width: 1200px;
+  min-width: 0;
+}
+
+.app-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 /* Page */
@@ -1095,13 +1103,119 @@ code { background: var(--bg); padding: 0.15rem 0.4rem; border-radius: 4px; font-
 .exp-comment { padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
 .exp-comment-form { display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 1rem; }
 .exp-comment-form .form-field { flex: 1; margin: 0; }
-.compliance-dot-wrap { white-space: nowrap; }
+.approval-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.approval-card { padding: 1rem; }
+.approval-card-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; margin-bottom: 0.5rem; }
+.approval-card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+.compact-perms dt { margin-top: 0.5rem; }
+.mobile-menu-toggle, .mobile-overlay, .bottom-nav { display: none; }
 
 @media (max-width: 900px) {
   .app-shell { flex-direction: column; }
-  .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 1rem; }
-  .sidebar-nav { flex-direction: row; flex-wrap: wrap; }
-  .sidebar-footer { display: flex; flex-direction: column; width: 100%; margin-top: 0.5rem; }
-  .dashboard-grid, .detail-grid { grid-template-columns: 1fr; }
-  .main-content { padding: 1rem; }
+  .app-body { flex: 1; display: flex; flex-direction: column; min-width: 0; padding-bottom: env(safe-area-inset-bottom, 0); }
+  .mobile-menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: max(0.75rem, env(safe-area-inset-top));
+    left: 0.75rem;
+    z-index: 120;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 12px;
+    background: var(--bg-sidebar);
+    color: #fff;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+  }
+  .mobile-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    border: none;
+    background: rgba(0,0,0,0.45);
+    cursor: pointer;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 110;
+    width: min(300px, 88vw);
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    box-shadow: var(--shadow);
+  }
+  .sidebar.sidebar-open { transform: translateX(0); }
+  .sidebar-nav { flex-direction: column; flex-wrap: nowrap; max-height: calc(100vh - 220px); overflow-y: auto; }
+  .nav-link-label { flex: 1; }
+  .nav-badge {
+    margin-left: auto;
+    background: var(--danger);
+    color: #fff;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+  }
+  .main-content {
+    padding: calc(3.5rem + env(safe-area-inset-top, 0)) 1rem calc(5rem + env(safe-area-inset-bottom, 0));
+  }
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 90;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    padding: 0.35rem 0.25rem calc(0.35rem + env(safe-area-inset-bottom, 0));
+    justify-content: space-around;
+  }
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    min-width: 56px;
+  }
+  .bottom-nav-item.active { color: var(--accent); font-weight: 600; }
+  .bottom-nav-icon-wrap { position: relative; display: inline-flex; }
+  .bottom-nav-dot {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 0.6rem;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+  .page-header h1 { font-size: 1.35rem; }
+  .header-actions { width: 100%; }
+  .header-actions .btn, .header-actions button { flex: 1; min-width: 0; justify-content: center; }
+  .dashboard-grid, .detail-grid, .my-day-grid { grid-template-columns: 1fr; }
+  .card-wide { grid-column: span 1; }
+  .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .data-table { min-width: 640px; }
+  .doc-upload-row { flex-direction: column; align-items: stretch; }
+  .approval-card-actions { flex-direction: column; }
+  .team-row { flex-wrap: wrap; }
+}
+
+@media (min-width: 901px) {
+  .mobile-menu-toggle, .mobile-overlay, .bottom-nav { display: none !important; }
 }

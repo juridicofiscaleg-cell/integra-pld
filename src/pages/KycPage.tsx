@@ -7,6 +7,8 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { FilterBar } from '../components/ui/FilterBar'
 import { deleteKycRecord } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import { useProtectedAction } from '../hooks/useProtectedAction'
+import { canDelete as roleCanDelete, needsApprovalForSensitive } from '../lib/permissions'
 import { NewKycModal } from '../components/kyc/NewKycModal'
 import { EditKycModal } from '../components/kyc/EditKycModal'
 import { useClients, useExpedientes, useKycRecords } from '../hooks/useData'
@@ -33,6 +35,7 @@ export function KycPage() {
   const openEdit = searchParams.get('edit') === '1'
   const highlightRef = useRef<HTMLDivElement>(null)
   const { user, profile } = useAuth()
+  const { runSensitiveAction } = useProtectedAction()
   const { records, loading, refetch } = useKycRecords()
   const { clients } = useClients()
   const { expedientes } = useExpedientes()
@@ -44,7 +47,7 @@ export function KycPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [pepFilter, setPepFilter] = useState('')
 
-  const canDelete = profile?.role !== 'asistente'
+  const mayDelete = roleCanDelete(profile?.role) || needsApprovalForSensitive(profile?.role)
 
   const filtered = useMemo(() => {
     return records.filter((k) => {
@@ -140,7 +143,7 @@ export function KycPage() {
                     <button type="button" className="icon-btn" onClick={() => setEditing(kyc)} title="Editar">
                       <Pencil size={16} />
                     </button>
-                    {canDelete && (
+                    {mayDelete && (
                       <button type="button" className="icon-btn danger" onClick={() => setDeleteTarget(kyc)} title="Eliminar">
                         <Trash2 size={16} />
                       </button>
@@ -187,7 +190,13 @@ export function KycPage() {
         onConfirm={async () => {
           if (!deleteTarget) return
           setDeleting(true)
-          await deleteKycRecord(deleteTarget.id, user?.id)
+          await runSensitiveAction({
+            actionType: 'delete_kyc',
+            title: `Eliminar KYC: ${deleteTarget.clients?.name ?? 'Cliente'}`,
+            clientId: deleteTarget.client_id,
+            payload: { kycId: deleteTarget.id },
+            direct: () => deleteKycRecord(deleteTarget.id, user?.id),
+          })
           setDeleting(false)
           setDeleteTarget(null)
           refetch()

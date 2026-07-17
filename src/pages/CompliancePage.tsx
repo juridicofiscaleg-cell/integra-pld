@@ -18,7 +18,7 @@ import {
 import { exportTrainingsCsv } from '../lib/export'
 import type { TrainingSession } from '../lib/types'
 import { formatDate } from '../lib/utils'
-import { canDelete as roleCanDelete, canWrite } from '../lib/permissions'
+import { canDelete as roleCanDelete, canWrite, needsApprovalForSensitive } from '../lib/permissions'
 import { parseParticipants } from '../lib/certificate-template'
 
 export function CompliancePage() {
@@ -42,7 +42,7 @@ export function CompliancePage() {
   const [openOfficerForm, setOpenOfficerForm] = useState(false)
   const [openManualForm, setOpenManualForm] = useState(false)
 
-  const canDelete = roleCanDelete(profile?.role)
+  const mayDelete = roleCanDelete(profile?.role) || needsApprovalForSensitive(profile?.role)
   const canEdit = canWrite(profile?.role)
   const currentYear = new Date().getFullYear()
   const sessionsThisYear = sessions.filter((s) => s.session_date.startsWith(String(currentYear)))
@@ -153,7 +153,7 @@ export function CompliancePage() {
         officers={officers}
         clients={clients}
         loading={officersLoading}
-        canDelete={canDelete}
+        canDelete={mayDelete}
         canEdit={canEdit}
         initialClientId={prefillClientId}
         openOfficerForm={openOfficerForm}
@@ -167,7 +167,7 @@ export function CompliancePage() {
         manuals={manuals}
         clients={clients}
         loading={manualsLoading}
-        canDelete={canDelete}
+        canDelete={mayDelete}
         canEdit={canEdit}
         initialClientId={prefillClientId}
         openUploadForm={openManualForm}
@@ -288,7 +288,7 @@ export function CompliancePage() {
         session={detailSession}
         clients={clients}
         officers={officers}
-        canDelete={canDelete}
+        canDelete={mayDelete}
         onClose={() => setDetailSession(null)}
         onEdit={(s) => { setDetailSession(null); setEditSession(s); setFormOpen(true) }}
         onUpdated={refetchSessions}

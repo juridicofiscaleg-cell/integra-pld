@@ -9,10 +9,8 @@ import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { createPldOperation, createUnusualNotice, deletePldOperation, deleteUnusualNotice } from '../lib/api'
-import { classifyOperation, getThresholdForActivity } from '../lib/sat-thresholds'
-import { EditNoticeModal } from '../components/operations/EditNoticeModal'
-import { EditOperationModal } from '../components/operations/EditOperationModal'
-import { useAuth } from '../context/AuthContext'
+import { useProtectedAction } from '../hooks/useProtectedAction'
+import { canDelete as roleCanDelete, canWrite, needsApprovalForSensitive } from '../lib/permissions'
 import {
   useClients,
   useExpedientes,
@@ -26,13 +24,17 @@ import {
   OPERATION_TYPES,
   type NoticeType,
 } from '../lib/types'
+import { classifyOperation, getThresholdForActivity } from '../lib/sat-thresholds'
+import { EditNoticeModal } from '../components/operations/EditNoticeModal'
+import { EditOperationModal } from '../components/operations/EditOperationModal'
+import { useAuth } from '../context/AuthContext'
 import { formatDate } from '../lib/utils'
-import { canDelete as roleCanDelete, canWrite } from '../lib/permissions'
 
 export function OperationsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const prefilledClient = searchParams.get('cliente') ?? ''
   const { user, profile } = useAuth()
+  const { runSensitiveAction } = useProtectedAction()
   const { clients } = useClients()
   const { expedientes } = useExpedientes()
   const { profiles } = useProfiles()
@@ -51,7 +53,7 @@ export function OperationsPage() {
   const [deleteNoticeId, setDeleteNoticeId] = useState<string | null>(null)
   const [initialClientId, setInitialClientId] = useState('')
 
-  const canDelete = roleCanDelete(profile?.role)
+  const mayDelete = roleCanDelete(profile?.role) || needsApprovalForSensitive(profile?.role)
   const canEdit = canWrite(profile?.role)
 
   useEffect(() => {
@@ -194,7 +196,7 @@ export function OperationsPage() {
                     <td>{op.reported ? <Badge variant="success">Sí</Badge> : '—'}</td>
                     <td>
                       <button type="button" className="icon-btn" onClick={() => setEditOp(op)} title="Editar"><Pencil size={14} /></button>
-                      {canDelete && (
+                      {mayDelete && (
                         <button type="button" className="icon-btn danger" onClick={() => setDeleteOpId(op.id)}>
                           <Trash2 size={14} />
                         </button>
@@ -231,7 +233,7 @@ export function OperationsPage() {
                 {canEdit && (
                   <Button variant="secondary" onClick={() => setEditNotice(n)}><Pencil size={14} /> Editar</Button>
                 )}
-                {canDelete && (
+                {mayDelete && (
                   <Button variant="danger" onClick={() => setDeleteNoticeId(n.id)}><Trash2 size={14} /></Button>
                 )}
               </div>
@@ -267,7 +269,15 @@ export function OperationsPage() {
         confirmLabel="Eliminar"
         danger
         onConfirm={async () => {
-          if (deleteOpId) await deletePldOperation(deleteOpId)
+          if (!deleteOpId) return
+          const op = operations.find((o) => o.id === deleteOpId)
+          await runSensitiveAction({
+            actionType: 'delete_operation',
+            title: `Eliminar operación: ${op?.operation_type ?? deleteOpId}`,
+            clientId: op?.client_id,
+            payload: { operationId: deleteOpId },
+            direct: () => deletePldOperation(deleteOpId),
+          })
           setDeleteOpId(null)
           refetchOps()
         }}
@@ -284,7 +294,15 @@ export function OperationsPage() {
         confirmLabel="Eliminar"
         danger
         onConfirm={async () => {
-          if (deleteNoticeId) await deleteUnusualNotice(deleteNoticeId)
+          if (!deleteNoticeId) return
+          const n = notices.find((x) => x.id === deleteNoticeId)
+          await runSensitiveAction({
+            actionType: 'delete_notice',
+            title: `Eliminar aviso: ${n?.title ?? deleteNoticeId}`,
+            clientId: n?.client_id,
+            payload: { noticeId: deleteNoticeId },
+            direct: () => deleteUnusualNotice(deleteNoticeId),
+          })
           setDeleteNoticeId(null)
           refetchNotices()
         }}

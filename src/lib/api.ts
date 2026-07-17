@@ -1630,3 +1630,174 @@ export async function exportClientBundle(clientId: string): Promise<{ error?: st
   URL.revokeObjectURL(url)
   return {}
 }
+
+const APPROVALS_STORAGE_KEY = 'integra_approval_requests'
+
+function readLocalApprovals(): import('./types').ApprovalRequest[] {
+  try {
+    const raw = localStorage.getItem(APPROVALS_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as import('./types').ApprovalRequest[]) : []
+  } catch {
+    return []
+  }
+}
+
+function writeLocalApprovals(list: import('./types').ApprovalRequest[]) {
+  localStorage.setItem(APPROVALS_STORAGE_KEY, JSON.stringify(list))
+}
+
+export async function fetchApprovalRequests(): Promise<{
+  requests: import('./types').ApprovalRequest[]
+  error?: string
+}> {
+  if (!supabase) {
+    return { requests: readLocalApprovals().sort((a, b) => b.created_at.localeCompare(a.created_at)) }
+  }
+  const { data, error } = await supabase
+    .from('approval_requests')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) return { requests: [], error: formatSupabaseMigrationError(error.message) }
+  return { requests: (data ?? []) as import('./types').ApprovalRequest[] }
+}
+
+export async function createApprovalRequest(
+  data: {
+    action_type: import('./types').ApprovalActionType
+    title: string
+    description?: string
+    payload: Record<string, unknown>
+    client_id?: string
+  },
+  userId?: string,
+): Promise<{ id?: string; error?: string }> {
+  const row = {
+    id: crypto.randomUUID(),
+    action_type: data.action_type,
+    title: data.title.trim(),
+    description: data.description?.trim() || null,
+    payload: data.payload,
+    client_id: data.client_id || null,
+    status: 'pendiente' as const,
+    requested_by: userId ?? null,
+    created_at: new Date().toISOString(),
+  }
+
+  if (!supabase) {
+    const list = readLocalApprovals()
+    list.unshift(row as import('./types').ApprovalRequest)
+    writeLocalApprovals(list)
+    return { id: row.id }
+  }
+
+  const { data: created, error } = await supabase
+    .from('approval_requests')
+    .insert({
+      action_type: row.action_type,
+      title: row.title,
+      description: row.description,
+      payload: row.payload,
+      client_id: row.client_id,
+      requested_by: row.requested_by,
+    })
+    .select('id')
+    .single()
+
+  if (error) return { error: formatSupabaseMigrationError(error.message) }
+
+  await supabase.from('activity_log').insert({
+    client_id: data.client_id,
+    user_id: userId ?? null,
+    action: 'autorizacion_solicitada',
+    description: `Solicitó autorización: ${row.title}`,
+  })
+
+  return { id: created?.id }
+}
+
+export async function reviewApprovalRequest(
+  id: string,
+  decision: 'aprobada' | 'rechazada',
+  reviewNotes?: string,
+  reviewerId?: string,
+): Promise<{ error?: string }> {
+  const now = new Date().toISOString()
+
+  if (!supabase) {
+    const list = readLocalApprovals()
+    const idx = list.findIndex((r) => r.id === id)
+    if (idx < 0) return { error: 'Solicitud no encontrada' }
+    const req = list[idx]
+    if (req.status !== 'pendiente') return { error: 'La solicitud ya fue revisada' }
+    if (decision === 'aprobada') {
+      const { executeApprovalAction } = await import('./approval-executor')
+      const exec = await executeApprovalAction(req.action_type, req.payload, reviewerId)
+      if (exec.error) return exec
+    }
+    list[idx] = {
+      ...req,
+      status: decision,
+      reviewed_by: reviewerId,
+      review_notes: reviewNotes?.trim() || undefined,
+      reviewed_at: now,
+    }
+    writeLocalApprovals(list)
+    return {}
+  }
+
+  const { data: req, error: fetchErr } = await supabase
+    .from('approval_requests')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (fetchErr || !req) return { error: fetchErr?.message ?? 'Solicitud no encontrada' }
+  if (req.status !== 'pendiente') return { error: 'La solicitud ya fue revisada' }
+
+  if (decision === 'aprobada') {
+    const { executeApprovalAction } = await import('./approval-executor')
+    const exec = await executeApprovalAction(
+      req.action_type as import('./types').ApprovalActionType,
+      req.payload as Record<string, unknown>,
+      reviewerId,
+    )
+    if (exec.error) return exec
+  }
+
+  const { error } = await supabase
+    .from('approval_requests')
+    .update({
+      status: decision,
+      reviewed_by: reviewerId ?? null,
+      review_notes: reviewNotes?.trim() || null,
+      reviewed_at: now,
+    })
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+
+  await supabase.from('activity_log').insert({
+    client_id: req.client_id,
+    user_id: reviewerId ?? null,
+    action: decision === 'aprobada' ? 'autorizacion_aprobada' : 'autorizacion_rechazada',
+    description: `${decision === 'aprobada' ? 'Aprobó' : 'Rechazó'} solicitud: ${req.title}`,
+  })
+
+  return {}
+}
+
+export async function updateProfileRole(
+  profileId: string,
+  role: import('./types').UserRole,
+  userId?: string,
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: 'Supabase no configurado' }
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', profileId)
+  if (error) return { error: error.message }
+  await supabase.from('activity_log').insert({
+    user_id: userId ?? null,
+    action: 'rol_actualizado',
+    description: `Actualizó rol de usuario a ${role}`,
+  })
+  return {}
+}

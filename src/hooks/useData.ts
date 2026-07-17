@@ -321,23 +321,23 @@ export function useProfiles() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  async function fetchProfiles() {
     if (!isSupabaseConfigured) {
       setProfiles([DEMO_PROFILE])
       setLoading(false)
       return
     }
-    supabase!
-      .from('profiles')
-      .select('*')
-      .order('full_name')
-      .then(({ data }) => {
-        setProfiles(data ?? [])
-        setLoading(false)
-      })
+    setLoading(true)
+    const { data } = await supabase!.from('profiles').select('*').order('full_name')
+    setProfiles(data ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    fetchProfiles()
   }, [])
 
-  return { profiles, loading }
+  return { profiles, loading, refetch: fetchProfiles }
 }
 
 export function useLegalResources() {

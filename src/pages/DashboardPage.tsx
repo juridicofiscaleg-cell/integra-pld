@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Calendar, FileCheck, FolderOpen, GraduationCap, Shield, Users } from 'lucide-react'
+import { AlertTriangle, Calendar, FileCheck, FolderOpen, GraduationCap, Shield, ShieldCheck, Users } from 'lucide-react'
 import { Badge } from '../components/ui/Badge'
 import { useAuth } from '../context/AuthContext'
+import { useApprovalRequests } from '../hooks/useApprovalRequests'
+import { canReviewApprovals, needsApprovalForSensitive } from '../lib/permissions'
 import {
   useActivity,
   useAlerts,
@@ -22,7 +24,8 @@ import { formatDate, formatRelative } from '../lib/utils'
 import { differenceInDays, differenceInHours, parseISO, subMonths } from 'date-fns'
 
 export function DashboardPage() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
+  const { pending: pendingApprovals, requests: approvalRequests } = useApprovalRequests()
   const { clients } = useClients()
   const { expedientes } = useExpedientes()
   const { records: kycRecords } = useKycRecords()
@@ -36,6 +39,10 @@ export function DashboardPage() {
   const { profiles } = useProfiles()
 
   const profileName = profiles.find((p) => p.id === user?.id)
+  const myPendingApprovals = approvalRequests.filter(
+    (r) => r.status === 'pendiente' && r.requested_by === user?.id,
+  )
+  const isAssistant = needsApprovalForSensitive(profile?.role)
 
   const activeExpedientes = expedientes.filter((e) => e.status === 'activo')
   const myExpedientes = activeExpedientes.filter((e) => e.assigned_to === user?.id)
@@ -102,6 +109,57 @@ export function DashboardPage() {
           </Link>
         ))}
       </div>
+
+      <section className="card card-wide mi-bandeja-section">
+        <div className="client-ops-header">
+          <h2>Mi bandeja — hoy</h2>
+          {(canReviewApprovals(profile?.role) && pendingApprovals.length > 0) && (
+            <Link to="/autorizaciones" className="btn-link">
+              <ShieldCheck size={16} /> {pendingApprovals.length} autorización(es) pendiente(s)
+            </Link>
+          )}
+          {isAssistant && myPendingApprovals.length > 0 && (
+            <span className="cell-sub">{myPendingApprovals.length} solicitud(es) en espera de tu abogado</span>
+          )}
+        </div>
+        <div className="my-day-grid">
+          <div>
+            <h3>Prioridad inmediata</h3>
+            {(h24Urgent.length === 0 && expiringKyc.length === 0 && myAlerts.length === 0) ? (
+              <p className="empty-state compact">Sin urgencias</p>
+            ) : (
+              <>
+                {h24Urgent.slice(0, 2).map((n) => (
+                  <Link key={n.id} to="/operaciones" className="mini-list-item">
+                    <strong>Aviso 24h</strong><span>{n.clients?.name}</span>
+                  </Link>
+                ))}
+                {expiringKyc.slice(0, 2).map((k) => (
+                  <Link key={k.id} to={`/kyc?kyc=${k.id}`} className="mini-list-item">
+                    <strong>KYC</strong><span>{k.clients?.name}</span>
+                  </Link>
+                ))}
+                {myAlerts.slice(0, 2).map((a) => (
+                  <Link key={a.id} to={a.client_id ? `/clientes/${a.client_id}` : '/alertas'} className="mini-list-item">
+                    <strong>{a.title}</strong>
+                  </Link>
+                ))}
+              </>
+            )}
+          </div>
+          <div>
+            <h3>Accesos rápidos</h3>
+            <div className="mini-list">
+              <Link to="/clientes" className="mini-list-item"><strong>Nuevo cliente / consultar</strong></Link>
+              <Link to="/operaciones?cliente=" className="mini-list-item"><strong>Registrar operación</strong></Link>
+              <Link to="/calendario" className="mini-list-item"><strong>Calendario PLD</strong></Link>
+              {canReviewApprovals(profile?.role) && (
+                <Link to="/autorizaciones" className="mini-list-item"><strong>Autorizaciones del equipo</strong></Link>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="card card-wide">
         <h2>Cumplimiento PLD (Arts. 52–54)</h2>
