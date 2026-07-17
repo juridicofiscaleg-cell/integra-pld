@@ -15,14 +15,20 @@ export function ExpedienteComments({ expedienteId }: ExpedienteCommentsProps) {
   const { comments, loading, refetch } = useExpedienteComments(expedienteId)
   const [body, setBody] = useState('')
   const [posting, setPosting] = useState(false)
+  const [error, setError] = useState('')
 
   async function post(e: React.FormEvent) {
     e.preventDefault()
     if (!body.trim()) return
     setPosting(true)
-    await addExpedienteComment(expedienteId, body, user?.id)
-    setBody('')
+    setError('')
+    const result = await addExpedienteComment(expedienteId, body, user?.id)
     setPosting(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    setBody('')
     refetch()
   }
 
@@ -31,6 +37,7 @@ export function ExpedienteComments({ expedienteId }: ExpedienteCommentsProps) {
       <form onSubmit={post} className="exp-comment-form">
         <Input label="" placeholder="Comentario interno del equipo..." value={body} onChange={(e) => setBody(e.target.value)} />
         <Button type="submit" variant="secondary" disabled={posting}>{posting ? '...' : 'Comentar'}</Button>
+        {error && <p className="form-error">{error}</p>}
       </form>
       {loading ? <p className="loading">...</p> : comments.length === 0 ? (
         <p className="empty-state">Sin comentarios</p>

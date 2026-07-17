@@ -1264,17 +1264,50 @@ export async function deleteExpedienteComment(commentId: string): Promise<{ erro
 }
 
 export async function getComplianceOfficer(): Promise<{ officer?: import('./types').ComplianceOfficer; error?: string }> {
-  if (!supabase) return { officer: { name: '', email: '' } }
-  const { data } = await supabase.from('firm_settings').select('value').eq('key', 'compliance_officer').single()
+  if (!supabase) {
+    try {
+      const raw = localStorage.getItem('integra_compliance_officer')
+      if (raw) return { officer: JSON.parse(raw) as import('./types').ComplianceOfficer }
+    } catch {
+      /* ignore */
+    }
+    return { officer: { name: '', email: '' } }
+  }
+  const { data, error } = await supabase
+    .from('firm_settings')
+    .select('value')
+    .eq('key', 'compliance_officer')
+    .maybeSingle()
+  if (error) {
+    const migrationHint = error.message.includes('firm_settings') || error.code === '42P01'
+      ? ' Ejecuta supabase/migration-v5.sql en el SQL Editor de Supabase.'
+      : ''
+    return { officer: { name: '', email: '' }, error: error.message + migrationHint }
+  }
   return { officer: (data?.value ?? { name: '', email: '' }) as import('./types').ComplianceOfficer }
 }
 
 export async function saveComplianceOfficer(officer: import('./types').ComplianceOfficer): Promise<{ error?: string }> {
-  if (!supabase) return { error: 'Supabase no configurado' }
+  if (!supabase) {
+    try {
+      localStorage.setItem('integra_compliance_officer', JSON.stringify(officer))
+      return {}
+    } catch {
+      return { error: 'Supabase no configurado' }
+    }
+  }
   const { error } = await supabase
     .from('firm_settings')
-    .upsert({ key: 'compliance_officer', value: officer, updated_at: new Date().toISOString() })
-  if (error) return { error: error.message }
+    .upsert(
+      { key: 'compliance_officer', value: officer, updated_at: new Date().toISOString() },
+      { onConflict: 'key' },
+    )
+  if (error) {
+    const migrationHint = error.message.includes('firm_settings') || error.code === '42P01'
+      ? ' Ejecuta supabase/migration-v5.sql en el SQL Editor de Supabase.'
+      : ''
+    return { error: error.message + migrationHint }
+  }
   return {}
 }
 

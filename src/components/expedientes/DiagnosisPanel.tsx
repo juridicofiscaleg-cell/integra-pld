@@ -18,6 +18,7 @@ export function DiagnosisPanel({ expediente, onUpdated }: DiagnosisPanelProps) {
     stored.length ? stored : defaultDiagnosisChecklist(),
   )
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
   const progress = diagnosisProgress(items as import('../../lib/diagnosis-checklist').DiagnosisItem[])
 
@@ -31,8 +32,13 @@ export function DiagnosisPanel({ expediente, onUpdated }: DiagnosisPanelProps) {
 
   async function save() {
     setSaving(true)
-    await saveExpedienteDiagnosis(expediente.id, items, user?.id)
+    setError('')
+    const result = await saveExpedienteDiagnosis(expediente.id, items, user?.id)
     setSaving(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
     onUpdated()
   }
 
@@ -50,6 +56,7 @@ export function DiagnosisPanel({ expediente, onUpdated }: DiagnosisPanelProps) {
         </div>
       ))}
       <Button type="button" disabled={saving} onClick={save}>{saving ? 'Guardando...' : 'Guardar diagnóstico'}</Button>
+      {error && <p className="form-error">{error}</p>}
     </div>
   )
 }

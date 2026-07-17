@@ -60,6 +60,9 @@ alter table firm_settings enable row level security;
 drop policy if exists "Equipo CRUD manuales" on compliance_manuals;
 drop policy if exists "Equipo CRUD capacitacion" on training_sessions;
 drop policy if exists "Equipo CRUD comentarios" on expediente_comments;
+drop policy if exists "Equipo lee/escribe comentarios" on expediente_comments;
+drop policy if exists "Equipo inserta comentarios" on expediente_comments;
+drop policy if exists "Equipo elimina comentarios" on expediente_comments;
 drop policy if exists "Equipo CRUD settings" on firm_settings;
 
 create policy "Equipo CRUD manuales" on compliance_manuals for all to authenticated using (true) with check (true);

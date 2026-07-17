@@ -19,20 +19,48 @@ export function CompliancePage() {
   const { manuals, refetch: refetchManuals } = useComplianceManuals()
   const { sessions, refetch: refetchSessions } = useTrainingSessions()
   const [officer, setOfficer] = useState<ComplianceOfficer>({ name: '', email: '' })
+  const [officerSaving, setOfficerSaving] = useState(false)
+  const [officerError, setOfficerError] = useState('')
+  const [officerSuccess, setOfficerSuccess] = useState('')
+  const [pageError, setPageError] = useState('')
   const [trainingOpen, setTrainingOpen] = useState(false)
   const [trainTitle, setTrainTitle] = useState('')
   const [trainDate, setTrainDate] = useState(new Date().toISOString().slice(0, 10))
   const [trainTopic, setTrainTopic] = useState('Capacitación PLD/FT')
   const [trainParticipants, setTrainParticipants] = useState('')
+  const [trainError, setTrainError] = useState('')
+  const [trainSaving, setTrainSaving] = useState(false)
   const [manualTitle, setManualTitle] = useState('Manual PLD')
   const [manualVersion, setManualVersion] = useState('1.0')
   const [manualDate, setManualDate] = useState(new Date().toISOString().slice(0, 10))
+  const [manualError, setManualError] = useState('')
+  const [manualUploading, setManualUploading] = useState(false)
 
   useEffect(() => {
-    getComplianceOfficer().then(({ officer: o }) => {
+    getComplianceOfficer().then(({ officer: o, error }) => {
       if (o) setOfficer(o)
+      if (error) setPageError(error)
     })
   }, [])
+
+  async function handleSaveOfficer(e: React.FormEvent) {
+    e.preventDefault()
+    if (!officer.name.trim()) {
+      setOfficerError('El nombre del oficial es obligatorio.')
+      setOfficerSuccess('')
+      return
+    }
+    setOfficerSaving(true)
+    setOfficerError('')
+    setOfficerSuccess('')
+    const result = await saveComplianceOfficer(officer)
+    setOfficerSaving(false)
+    if (result.error) {
+      setOfficerError(result.error)
+      return
+    }
+    setOfficerSuccess('Oficial de cumplimiento guardado correctamente.')
+  }
 
   const activeManual = manuals.find((m) => m.is_active)
 
@@ -45,16 +73,22 @@ export function CompliancePage() {
         </div>
       </header>
 
+      {pageError && <p className="form-error compliance-banner">{pageError}</p>}
+
       <div className="detail-grid">
         <section className="card">
           <h2>Oficial de cumplimiento</h2>
-          <div className="form-stack">
-            <Input label="Nombre" value={officer.name} onChange={(e) => setOfficer({ ...officer, name: e.target.value })} />
-            <Input label="Email" value={officer.email} onChange={(e) => setOfficer({ ...officer, email: e.target.value })} />
+          <form className="form-stack" onSubmit={handleSaveOfficer}>
+            <Input label="Nombre" value={officer.name} onChange={(e) => setOfficer({ ...officer, name: e.target.value })} required />
+            <Input label="Email" type="email" value={officer.email} onChange={(e) => setOfficer({ ...officer, email: e.target.value })} />
             <Input label="RFC" value={officer.rfc ?? ''} onChange={(e) => setOfficer({ ...officer, rfc: e.target.value })} />
             <Input label="Fecha designación" type="date" value={officer.appointed_at ?? ''} onChange={(e) => setOfficer({ ...officer, appointed_at: e.target.value })} />
-            <Button onClick={async () => { await saveComplianceOfficer(officer) }}>Guardar oficial</Button>
-          </div>
+            {officerError && <p className="form-error">{officerError}</p>}
+            {officerSuccess && <p className="form-success">{officerSuccess}</p>}
+            <Button type="submit" disabled={officerSaving}>
+              {officerSaving ? 'Guardando...' : 'Guardar oficial'}
+            </Button>
+          </form>
         </section>
 
         <section className="card">
@@ -82,14 +116,28 @@ export function CompliancePage() {
             <input
               type="file"
               accept=".pdf,.doc,.docx"
+              disabled={manualUploading}
               onChange={async (e) => {
                 const file = e.target.files?.[0]
                 if (!file) return
-                await uploadComplianceManual(file, { title: manualTitle, version: manualVersion, effective_date: manualDate }, user?.id)
-                refetchManuals()
+                setManualError('')
+                setManualUploading(true)
+                const result = await uploadComplianceManual(
+                  file,
+                  { title: manualTitle, version: manualVersion, effective_date: manualDate },
+                  user?.id,
+                )
+                setManualUploading(false)
+                if (result.error) {
+                  setManualError(result.error)
+                } else {
+                  refetchManuals()
+                }
                 e.target.value = ''
               }}
             />
+            {manualUploading && <p className="card-desc">Subiendo manual...</p>}
+            {manualError && <p className="form-error">{manualError}</p>}
             <p className="card-desc">Subir nueva versión desactiva la anterior automáticamente.</p>
           </div>
         </section>
@@ -102,20 +150,31 @@ export function CompliancePage() {
           {trainingOpen && (
             <form className="form-stack" onSubmit={async (e) => {
               e.preventDefault()
-              await createTrainingSession({
+              setTrainError('')
+              setTrainSaving(true)
+              const result = await createTrainingSession({
                 title: trainTitle,
                 session_date: trainDate,
                 topic: trainTopic,
                 participants: trainParticipants,
               }, user?.id)
+              setTrainSaving(false)
+              if (result.error) {
+                setTrainError(result.error)
+                return
+              }
               setTrainingOpen(false)
+              setTrainTitle('')
               refetchSessions()
             }}>
               <Input label="Título" value={trainTitle} onChange={(e) => setTrainTitle(e.target.value)} required />
               <Input label="Fecha" type="date" value={trainDate} onChange={(e) => setTrainDate(e.target.value)} required />
               <Input label="Tema" value={trainTopic} onChange={(e) => setTrainTopic(e.target.value)} required />
               <Input label="Participantes" value={trainParticipants} onChange={(e) => setTrainParticipants(e.target.value)} />
-              <Button type="submit">Guardar capacitación</Button>
+              {trainError && <p className="form-error">{trainError}</p>}
+              <Button type="submit" disabled={trainSaving}>
+                {trainSaving ? 'Guardando...' : 'Guardar capacitación'}
+              </Button>
             </form>
           )}
           {sessions.length === 0 ? (
