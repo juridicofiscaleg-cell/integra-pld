@@ -2,8 +2,7 @@ import { useState } from 'react'
 import { ShieldAlert, ShieldCheck } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { saveSanctionsResults } from '../../lib/api'
-import { isOpenSanctionsConfigured } from '../../lib/opensanctions'
-import { runSanctionsCheck, sanctionsSummary } from '../../lib/sanctions'
+import { isLiveSanctionsAvailable, runSanctionsCheck, sanctionsSummary } from '../../lib/sanctions'
 import { useAuth } from '../../context/AuthContext'
 import type { Client, KycRecord, SanctionsResults } from '../../lib/types'
 import { formatDateTime } from '../../lib/utils'
@@ -28,20 +27,30 @@ export function SanctionsPanel({ kyc, client, onUpdated }: SanctionsPanelProps) 
     setChecking(true)
     setError('')
 
-    const checkResults = await runSanctionsCheck(client.name, client.client_type, client.rfc)
-    const sanctionsMap: SanctionsResults = Object.fromEntries(
-      checkResults.map((r) => [r.list, r]),
-    )
+    try {
+      const checkResults = await runSanctionsCheck(client.name, client.client_type, client.rfc)
 
-    const result = await saveSanctionsResults(kyc.id, sanctionsMap, kyc.checklist, user?.id)
-    setChecking(false)
+      if (checkResults[0]?.source === 'simulación') {
+        setError('Modo demo activo — no se consultaron listas reales.')
+        setChecking(false)
+        return
+      }
 
-    if (result.error) {
-      setError(result.error)
-      return
+      const sanctionsMap: SanctionsResults = Object.fromEntries(
+        checkResults.map((r) => [r.list, r]),
+      )
+
+      const result = await saveSanctionsResults(kyc.id, sanctionsMap, kyc.checklist, user?.id)
+      if (result.error) {
+        setError(result.error)
+      } else {
+        onUpdated()
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al verificar listas')
     }
 
-    onUpdated()
+    setChecking(false)
   }
 
   return (
@@ -53,9 +62,9 @@ export function SanctionsPanel({ kyc, client, onUpdated }: SanctionsPanelProps) 
         </Button>
       </div>
       <p className="card-desc">
-        {isOpenSanctionsConfigured()
-          ? 'Consulta en vivo vía OpenSanctions (sanciones, PEP, listas México).'
-          : 'Modo simulación. Agrega VITE_OPENSANCTIONS_API_KEY en .env y GitHub Secrets.'}
+        {isLiveSanctionsAvailable()
+          ? 'Consulta en vivo vía OpenSanctions (servidor Supabase). Usa nombre completo para mejores resultados.'
+          : 'Modo demo — conecta Supabase para consultas reales.'}
       </p>
 
       {error && <p className="form-error">{error}</p>}
@@ -64,9 +73,10 @@ export function SanctionsPanel({ kyc, client, onUpdated }: SanctionsPanelProps) 
         <div className={`sanctions-summary ${summary.clear ? 'clear' : 'match'}`}>
           {summary.clear ? <ShieldCheck size={20} /> : <ShieldAlert size={20} />}
           <span>
+            {!summary.isLive && '⚠ Resultado simulado — '}
             {summary.clear
               ? 'Sin coincidencias en las listas consultadas'
-              : `${summary.matches} coincidencia(s) — requiere revisión manual`}
+              : `${summary.matches} coincidencia(s) — revisión manual obligatoria`}
           </span>
         </div>
       )}
@@ -76,8 +86,9 @@ export function SanctionsPanel({ kyc, client, onUpdated }: SanctionsPanelProps) 
           {resultList.map((r) => (
             <div key={r.list} className={`sanctions-row ${r.match ? 'match' : 'clear'}`}>
               <strong>{r.label}</strong>
-              <span>{r.match ? '⚠ Coincidencia' : '✓ Limpio'}</span>
+              <span>{r.match ? '⚠ Coincidencia' : '✓ Sin alerta'}</span>
               <p>{r.details}</p>
+              {r.matched_name && <p><em>Coincide con: {r.matched_name}</em></p>}
               <small>Fuente: {r.source ?? 'N/A'} · Consultado: {formatDateTime(r.checked_at)}</small>
             </div>
           ))}

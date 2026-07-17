@@ -1,87 +1,90 @@
-import type { ClientType, Expediente, ExpedienteStage, SanctionsResult } from './types'
-import { isOpenSanctionsConfigured, runOpenSanctionsCheck } from './opensanctions'
+import type { ClientType, SanctionsResult } from './types'
+import { isSupabaseConfigured, supabase } from './supabase'
 
-async function runSimulatedCheck(
-  clientName: string,
-  rfc?: string,
-): Promise<SanctionsResult[]> {
-  await new Promise((r) => setTimeout(r, 400))
-  const normalized = clientName.toLowerCase()
-  const riskyTerms = ['test', 'bloqueado', 'sancionado', 'prohibido']
-  const satRisky = ['xxx', '000', 'bloq']
-  const hasRisk = riskyTerms.some((t) => normalized.includes(t))
-  const satMatch = rfc ? satRisky.some((t) => rfc.toLowerCase().includes(t)) : false
+async function runSimulatedCheck(_clientName: string, _rfc?: string): Promise<SanctionsResult[]> {
+  await new Promise((r) => setTimeout(r, 300))
   const now = new Date().toISOString()
-
   return [
     {
       list: 'ofac',
-      label: 'Sanciones internacionales (OFAC/UN)',
+      label: 'Sanciones internacionales',
       checked_at: now,
-      match: hasRisk,
+      match: false,
       source: 'simulación',
-      details: hasRisk
-        ? 'Posible coincidencia (modo simulación). Configura VITE_OPENSANCTIONS_API_KEY.'
-        : 'Sin coincidencias (simulación).',
+      details: 'Modo demo — no consulta listas reales. Conecta Supabase + Edge Function.',
     },
     {
       list: 'sat_69b',
       label: 'SAT — Art. 69-B',
       checked_at: now,
-      match: satMatch,
+      match: false,
       source: 'simulación',
-      details: satMatch
-        ? 'RFC con señal de riesgo (simulación).'
-        : 'Sin registro en 69-B (simulación).',
+      details: 'Modo demo — no consulta listas reales.',
     },
     {
       list: 'un',
-      label: 'PEP — Personas políticamente expuestas',
+      label: 'PEP',
       checked_at: now,
-      match: hasRisk,
+      match: false,
       source: 'simulación',
-      details: hasRisk
-        ? 'Posible PEP (simulación).'
-        : 'Sin coincidencias PEP (simulación).',
+      details: 'Modo demo — no consulta listas reales.',
     },
   ]
 }
 
+/** Consulta listas vía Supabase Edge Function (evita CORS del navegador). */
 export async function runSanctionsCheck(
   clientName: string,
   clientType: ClientType,
   rfc?: string,
 ): Promise<SanctionsResult[]> {
-  const apiKey = import.meta.env.VITE_OPENSANCTIONS_API_KEY as string | undefined
-
-  if (isOpenSanctionsConfigured() && apiKey) {
-    try {
-      return await runOpenSanctionsCheck(clientName, clientType, rfc, apiKey)
-    } catch (err) {
-      console.error('OpenSanctions error:', err)
-      const simulated = await runSimulatedCheck(clientName, rfc)
-      simulated[0].details = `Error API: ${err instanceof Error ? err.message : 'desconocido'}. Resultado parcial en simulación.`
-      return simulated
-    }
+  if (!isSupabaseConfigured || !supabase) {
+    return runSimulatedCheck(clientName, rfc)
   }
 
-  return runSimulatedCheck(clientName, rfc)
+  const { data, error } = await supabase.functions.invoke('sanctions-check', {
+    body: { name: clientName, clientType, rfc },
+  })
+
+  if (error) {
+    throw new Error(
+      `No se pudo consultar listas: ${error.message}. Despliega la Edge Function "sanctions-check" y configura OPENSANCTIONS_API_KEY en Supabase.`,
+    )
+  }
+
+  if (data?.error) {
+    throw new Error(String(data.error))
+  }
+
+  if (data?.results?.length) {
+    return data.results as SanctionsResult[]
+  }
+
+  throw new Error(
+    'Edge Function sin respuesta. En Supabase: despliega sanctions-check y agrega el secret OPENSANCTIONS_API_KEY.',
+  )
+}
+
+export function isLiveSanctionsAvailable(): boolean {
+  return isSupabaseConfigured
 }
 
 export function sanctionsSummary(results: SanctionsResult[]): {
   clear: boolean
   matches: number
   source: string
+  isLive: boolean
 } {
   const matches = results.filter((r) => r.match).length
   const source = results[0]?.source ?? 'desconocido'
-  return { clear: matches === 0, matches, source }
+  const isLive = source === 'opensanctions'
+  return { clear: matches === 0, matches, source, isLive }
 }
 
 export function buildClientUpdateEmail(
   clientName: string,
-  expediente: Expediente,
-  stages: ExpedienteStage[],
+  expediente: import('./types').Expediente,
+  stages: import('./types').ExpedienteStage[],
 ): { subject: string; body: string } {
   const current = stages[expediente.current_stage_index]
   const completed = stages.filter((s) => s.status === 'completada').length

@@ -1,0 +1,27 @@
+#!/bin/bash
+# Despliega la Edge Function de verificación de listas en Supabase
+set -euo pipefail
+
+echo "=== Desplegar verificación OpenSanctions ==="
+echo ""
+echo "1. Instala Supabase CLI si no lo tienes:"
+echo "   brew install supabase/tap/supabase"
+echo ""
+echo "2. Login y vincula tu proyecto:"
+echo "   supabase login"
+echo "   supabase link --project-ref TU_PROJECT_REF"
+echo "   (El ref está en Supabase → Settings → General → Reference ID)"
+echo ""
+echo "3. Agrega el secret de OpenSanctions:"
+echo "   supabase secrets set OPENSANCTIONS_API_KEY=tu-api-key"
+echo ""
+echo "4. Despliega la función:"
+echo "   cd ~/Projects/crm-juridico"
+echo "   supabase functions deploy sanctions-check --no-verify-jwt"
+echo ""
+echo "   (--no-verify-jwt permite llamarla con anon key + usuario logueado)"
+echo ""
+echo "Alternativa sin CLI:"
+echo "  Supabase Dashboard → Edge Functions → Create → pegar"
+echo "  supabase/functions/sanctions-check/index.ts"
+echo "  Luego Settings → Edge Functions → Secrets → OPENSANCTIONS_API_KEY"
