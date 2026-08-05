@@ -8,11 +8,29 @@
     "hecho": "juridicofiscaleg+hecho@gmail.com"
   },
   "etiqueta_procesado": "Capturado",
-  "actualizado": null,
+  "actualizado": "2026-08-05 13:05",
   "ultimo_arranque": null,
   "ultimo_cierre": null,
-  "ultima_sincronizacion_correo": null,
+  "ultima_sincronizacion_correo": "2026-08-05 13:05",
   "ultimo_reporte_semanal": null,
-  "consecutivo": 0,
-  "pendientes": []
+  "consecutivo": 1,
+  "pendientes": [
+    {
+      "id": "P-0001",
+      "titulo": "Integrar documentación de KAI FERRETERÍA para contrato de Terminales",
+      "detalle": "Capturado por correo (+pend). Reunir el expediente de documentación de KAI FERRETERÍA para el contrato con Terminales.",
+      "prioridad": "media",
+      "estado": "pendiente",
+      "cliente": "KAI FERRETERÍA",
+      "origen": "correo",
+      "creado": "2026-08-05",
+      "creado_ts": "2026-08-05 12:57",
+      "vence": null,
+      "cerrado": null,
+      "dias_rezagado": 0,
+      "historial": [
+        { "fecha": "2026-08-05 12:57", "evento": "creado", "nota": "captura por correo a +pend (msg 19fd3808889b70a0)" }
+      ]
+    }
+  ]
 }
