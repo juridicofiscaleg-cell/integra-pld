@@ -79,9 +79,17 @@ Adrián captura pendientes en 5 segundos mandando un correo (incluso por voz) a 
 | `juridicofiscaleg+urg@gmail.com` | pendiente nuevo, prioridad **alta** |
 | `juridicofiscaleg+hecho@gmail.com` | algo **ya resuelto** → se registra con estado `hecho` y `cerrado`=fecha del correo (para el conteo semanal) |
 
-**El contenido del pendiente** = asunto del correo; si el asunto viene vacío o genérico,
-usa la primera línea del cuerpo. Interprétalo en **lenguaje natural**:
-- Cliente: si menciona un nombre de cliente/empresa conocido o escribe `@Nombre`.
+**Un correo puede traer UNO o VARIOS pendientes.** Reglas de parseo:
+- Si el cuerpo trae una **lista** (2+ líneas no vacías, o viñetas `•`/`-`/`*`, o numeración
+  `1.` `2.`, o ítems separados por `;`): **cada ítem = un pendiente INDIVIDUAL**, todos con
+  el alias/prioridad/estado del correo. En ese caso el asunto se toma como encabezado y se ignora.
+- Si el cuerpo es una sola línea o va vacío: es **un** pendiente; su texto es esa línea, o el
+  asunto si el cuerpo está vacío.
+- **Ignora** líneas de firma y cortesías (p. ej. "Director Jurídico", "Lic. Adrian Gerardo",
+  "EG EMPRESARIAL", "Enviado desde mi…", saludos/despedidas) y cualquier texto citado (`>`).
+
+Interpreta cada ítem en **lenguaje natural**:
+- Cliente: si menciona un cliente/empresa conocido o escribe `@Nombre`.
 - Prioridad: `+urg` = alta; palabras como "urgente/hoy/ya" suben prioridad.
 - Fecha límite: "para el viernes", "antes del 15" → `vence`.
 

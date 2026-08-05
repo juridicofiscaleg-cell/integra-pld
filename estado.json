@@ -9,13 +9,30 @@
   },
   "etiqueta_procesado": "Capturado",
   "correos_procesados": ["19fd3808889b70a0", "19fd387fd0635215", "19fd388f2deb0dae"],
-  "actualizado": "2026-08-05 13:10",
+  "actualizado": "2026-08-05 13:15",
   "ultimo_arranque": null,
   "ultimo_cierre": null,
   "ultima_sincronizacion_correo": "2026-08-05 13:10",
   "ultimo_reporte_semanal": null,
-  "consecutivo": 3,
+  "consecutivo": 4,
   "pendientes": [
+    {
+      "id": "P-0004",
+      "titulo": "Activar conectores/permisos de escritura de Google para dejar el seguimiento 100% automático",
+      "detalle": "En claude.ai/customize/connectors y la pantalla de Routines (desde una compu): habilitar Gmail y Google Calendar y adjuntar el repo integra-pld a las 3 tareas, para que los reportes lleguen solos al correo a las 9:00/18:00 y lunes.",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "cliente": null,
+      "origen": "sesion",
+      "creado": "2026-08-05",
+      "creado_ts": "2026-08-05 13:15",
+      "vence": null,
+      "cerrado": null,
+      "dias_rezagado": 0,
+      "historial": [
+        { "fecha": "2026-08-05 13:15", "evento": "creado", "nota": "setup pendiente para full automatico" }
+      ]
+    },
     {
       "id": "P-0001",
       "titulo": "Integrar documentación de KAI FERRETERÍA para contrato de Terminales",
