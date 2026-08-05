@@ -1,9 +1,18 @@
 {
-  "version": 1,
+  "version": 2,
   "zona_horaria": "America/Hermosillo",
   "correo_destino": "juridicofiscaleg@gmail.com",
+  "alias_captura": {
+    "pend": "juridicofiscaleg+pend@gmail.com",
+    "urg": "juridicofiscaleg+urg@gmail.com",
+    "hecho": "juridicofiscaleg+hecho@gmail.com"
+  },
+  "etiqueta_procesado": "Capturado",
   "actualizado": null,
   "ultimo_arranque": null,
   "ultimo_cierre": null,
+  "ultima_sincronizacion_correo": null,
+  "ultimo_reporte_semanal": null,
+  "consecutivo": 0,
   "pendientes": []
 }
