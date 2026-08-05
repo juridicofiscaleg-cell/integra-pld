@@ -34,8 +34,9 @@ Rama **solo de datos**; nunca se fusiona a `main`.
 ## 2. Modelo de datos (`estado.json`)
 
 Cabecera: `version`, `zona_horaria`, `correo_destino`, `alias_captura` (pend/urg/hecho),
-`etiqueta_procesado`, `actualizado`, `ultimo_arranque`, `ultimo_cierre`,
-`ultima_sincronizacion_correo`, `ultimo_reporte_semanal`, `consecutivo`, `pendientes`.
+`etiqueta_procesado`, `correos_procesados` (IDs de mensajes ya ingeridos, para dedup),
+`actualizado`, `ultimo_arranque`, `ultimo_cierre`, `ultima_sincronizacion_correo`,
+`ultimo_reporte_semanal`, `consecutivo`, `pendientes`.
 
 Cada pendiente:
 
@@ -86,14 +87,18 @@ usa la primera línea del cuerpo. Interprétalo en **lenguaje natural**:
 
 ### Ingesta (correr en Arranque, Cierre, Reporte Semanal, y sync a pedido)
 
-1. Con el conector **Gmail**, busca correos de captura **no procesados**:
-   `to:(juridicofiscaleg+pend@gmail.com OR juridicofiscaleg+urg@gmail.com OR juridicofiscaleg+hecho@gmail.com) -label:Capturado newer_than:20d`
-2. Por cada correo (del más viejo al más nuevo):
+1. Con el conector **Gmail**, busca correos de captura recientes:
+   `to:(juridicofiscaleg+pend@gmail.com OR juridicofiscaleg+urg@gmail.com OR juridicofiscaleg+hecho@gmail.com) newer_than:20d`
+2. Por cada correo (del más viejo al más nuevo), **omite los que ya estén en
+   `correos_procesados`** de la cabecera (dedup por ID de mensaje — control anti-duplicados
+   principal, no depende de escribir en Gmail). Para los nuevos:
    - Crea un pendiente nuevo (`origen: "correo"`) con el título interpretado, la prioridad
      y el estado según el alias. `creado_ts` = fecha/hora del correo.
    - Para `+hecho`: estado `hecho`, `cerrado` = fecha del correo, historial "capturado_hecho".
-   - **Marca el correo como procesado**: aplica la etiqueta `Capturado` (créala con
-     `create_label` si no existe; su id se obtiene con `list_labels`) y quítale `UNREAD`.
+   - **Agrega el ID del mensaje a `correos_procesados`**.
+   - *Opcional (si hay permiso de escritura en Gmail):* aplica la etiqueta `Capturado`
+     (créala con `create_label` si no existe; id vía `list_labels`) para verlo marcado en la
+     bandeja. Si la escritura no está disponible, omite sin fallar.
 3. Actualiza `ultima_sincronizacion_correo` y guarda `estado.json` (commit + push).
 4. Si el conector Gmail **no está disponible** en esta corrida (p. ej. tarea automática sin
    conectores), **omite la ingesta**, no falles, y anótalo en el resumen: la próxima corrida
