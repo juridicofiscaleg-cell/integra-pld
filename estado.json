@@ -8,13 +8,13 @@
     "hecho": "juridicofiscaleg+hecho@gmail.com"
   },
   "etiqueta_procesado": "Capturado",
-  "correos_procesados": ["19fd3808889b70a0"],
-  "actualizado": "2026-08-05 13:05",
+  "correos_procesados": ["19fd3808889b70a0", "19fd387fd0635215", "19fd388f2deb0dae"],
+  "actualizado": "2026-08-05 13:10",
   "ultimo_arranque": null,
   "ultimo_cierre": null,
-  "ultima_sincronizacion_correo": "2026-08-05 13:05",
+  "ultima_sincronizacion_correo": "2026-08-05 13:10",
   "ultimo_reporte_semanal": null,
-  "consecutivo": 1,
+  "consecutivo": 3,
   "pendientes": [
     {
       "id": "P-0001",
@@ -31,6 +31,40 @@
       "dias_rezagado": 0,
       "historial": [
         { "fecha": "2026-08-05 12:57", "evento": "creado", "nota": "captura por correo a +pend (msg 19fd3808889b70a0)" }
+      ]
+    },
+    {
+      "id": "P-0002",
+      "titulo": "Dar seguimiento a los cobros retenidos de TOLEDO en Peiix",
+      "detalle": "Capturado por correo (+urg). Devolución/seguimiento de cobros retenidos de TOLEDO en la terminal Peiix.",
+      "prioridad": "alta",
+      "estado": "pendiente",
+      "cliente": "TOLEDO",
+      "origen": "correo",
+      "creado": "2026-08-05",
+      "creado_ts": "2026-08-05 13:05",
+      "vence": null,
+      "cerrado": null,
+      "dias_rezagado": 0,
+      "historial": [
+        { "fecha": "2026-08-05 13:05", "evento": "creado", "nota": "captura por correo a +urg (msg 19fd387fd0635215)" }
+      ]
+    },
+    {
+      "id": "P-0003",
+      "titulo": "Movimiento mensual de Julio completo (factura a pago de profesionistas) con estrategia NOM-035",
+      "detalle": "Capturado por correo (+hecho). DEMIZON: cerrado todo el movimiento mensual de Julio, desde factura hasta pago de profesionistas, con estrategia NOM-035.",
+      "prioridad": "media",
+      "estado": "hecho",
+      "cliente": "DEMIZON",
+      "origen": "correo",
+      "creado": "2026-08-05",
+      "creado_ts": "2026-08-05 13:06",
+      "vence": null,
+      "cerrado": "2026-08-05",
+      "dias_rezagado": 0,
+      "historial": [
+        { "fecha": "2026-08-05 13:06", "evento": "capturado_hecho", "nota": "captura por correo a +hecho (msg 19fd388f2deb0dae)" }
       ]
     }
   ]
