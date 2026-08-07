@@ -35,7 +35,8 @@ const CONFIG = {
              'VANGUARDIA','COFIDUE','CROSSFIT','MAUKAA'],
   // Líneas de firma/cortesía que se ignoran al parsear:
   firma: [/director jur/i, /lic\.?\s*adri/i, /eg empresarial/i,
-          /enviado desde/i, /^saludos/i, /^gracias/i, /^atentamente/i]
+          /enviado desde/i, /sent from my/i, /get outlook/i,
+          /^saludos/i, /^gracias/i, /^atentamente/i]
 };
 
 const COLS = ['ID','Creado','Hora','Cliente','Prioridad','Estado','Origen',
