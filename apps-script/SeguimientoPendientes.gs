@@ -78,6 +78,8 @@ function ingestarCapturas() {
         const items = parsearItems_(msg.getSubject(), msg.getPlainBody());
         const fecha = msg.getDate();
         items.forEach(txt => {
+          // +hecho: primero intenta CERRAR un pendiente existente (por ID o por texto).
+          if (t.estado === 'hecho' && cerrarPorTexto_(sh, txt)) { agregados++; return; }
           const cliente = detectarCliente_(txt);
           sh.appendRow([
             siguienteId_(sh), fmtFecha_(fecha), fmtHora_(fecha), cliente,
@@ -220,6 +222,35 @@ function ordenPrioridad_(a, b) {
   return d !== 0 ? d : Number(b.DiasRezago) - Number(a.DiasRezago);
 }
 
+// Cierra un pendiente ABIERTO ya existente. Devuelve true si cerró algo.
+// Busca 1) por ID (ej. "P-0002"), 2) por texto parecido. Si no encuentra, false.
+function cerrarPorTexto_(sh, txt) {
+  const abiertos = leerRows_(sh).filter(r => r.Estado === 'pendiente' || r.Estado === 'en_curso');
+  const hoy = fmtFecha_(new Date());
+  // 1) por ID
+  const m = txt.match(/\bP[-\s]?0*(\d{1,4})\b/i);
+  if (m) {
+    const id = 'P-' + ('000' + m[1]).slice(-4);
+    const row = abiertos.find(r => String(r.ID).toUpperCase() === id);
+    if (row) { marcarHecho_(sh, row._fila, hoy); return true; }
+  }
+  // 2) por texto parecido (contenido en cualquier sentido)
+  const n = normTxt_(txt);
+  if (n.length >= 4) {
+    const cand = abiertos.filter(r => { const t = normTxt_(r.Titulo); return t && (t.indexOf(n) !== -1 || n.indexOf(t) !== -1); });
+    if (cand.length) { marcarHecho_(sh, cand[cand.length - 1]._fila, hoy); return true; }
+  }
+  return false;
+}
+function marcarHecho_(sh, fila, hoy) {
+  escribirCelda_(sh, fila, 'Estado', 'hecho');
+  escribirCelda_(sh, fila, 'Cerrado', hoy);
+}
+function normTxt_(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /* ---- Hoja ---- */
 function asegurarHoja_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -280,10 +311,11 @@ function bloque_(titulo, contenido) {
 }
 function li_(r, extra) {
   const dot = r.Prioridad === 'alta' ? '🔴' : (r.Prioridad === 'baja' ? '⚪' : '🟡');
+  const idt = r.ID ? '<span style="color:#9ca3af;font-weight:600">' + esc_(r.ID) + '</span> ' : '';
   const cli = r.Cliente ? ' <span style="color:#6b7280">· ' + esc_(r.Cliente) + '</span>' : '';
   const ex  = extra ? ' <span style="color:#6b7280">· ' + esc_(extra) + '</span>' : '';
   return '<div style="font-size:14px;color:#374151;background:#f9fafb;border-radius:8px;padding:10px 12px;margin-bottom:6px">' +
-    dot + ' <b>' + esc_(r.Titulo) + '</b>' + cli + ex + '</div>';
+    dot + ' ' + idt + '<b>' + esc_(r.Titulo) + '</b>' + cli + ex + '</div>';
 }
 function vacio_(txt) {
   return '<div style="font-size:14px;color:#374151;background:#f9fafb;border-radius:8px;padding:12px">' + esc_(txt) + '</div>';
