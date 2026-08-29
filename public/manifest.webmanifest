@@ -2,18 +2,19 @@
   "name": "Integra PLD",
   "short_name": "Integra PLD",
   "description": "Expedientes, KYC y cumplimiento PLD para despachos jurídicos",
-  "start_url": ".",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#2c1810",
   "theme_color": "#7b2d3e",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "lang": "es-MX",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }
